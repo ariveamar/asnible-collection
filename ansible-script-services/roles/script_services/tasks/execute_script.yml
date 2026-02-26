@@ -1,0 +1,124 @@
+---
+# roles/script_services/tasks/execute_script.yml
+# Executes a single shell script from a defined directory path.
+# Handles validation, execution, stdout display, and result assertion.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BANNER
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label | upper }} ] ── BEGIN SCRIPT EXECUTION"
+  ansible.builtin.debug:
+    msg:
+      - "┌─────────────────────────────────────────────────────────────┐"
+      - "  Label       : {{ script_item.label }}"
+      - "  Target IP   : {{ target_host_ip }}"
+      - "  Directory   : {{ script_item.script_dir }}"
+      - "  Script File : {{ script_item.script_file }}"
+      - "  Arguments   : {{ script_item.args | default('(none)') }}"
+      - "  Full Path   : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "└─────────────────────────────────────────────────────────────┘"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1 — Validate directory exists
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 1 ─ Check script directory exists: {{ script_item.script_dir }}"
+  ansible.builtin.stat:
+    path: "{{ script_item.script_dir }}"
+  register: dir_stat
+
+- name: "[ {{ script_item.label }} ] STEP 1 ─ Assert directory exists"
+  ansible.builtin.assert:
+    that:
+      - dir_stat.stat.exists
+      - dir_stat.stat.isdir
+    fail_msg: >
+      ❌ Directory '{{ script_item.script_dir }}' does NOT exist on {{ target_host_ip }}.
+      Please verify the path in your variable definition.
+    success_msg: "✅ Directory confirmed: {{ script_item.script_dir }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2 — Validate script file exists
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 2 ─ Check script file exists: {{ script_item.script_file }}"
+  ansible.builtin.stat:
+    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+  register: script_stat
+
+- name: "[ {{ script_item.label }} ] STEP 2 ─ Assert script file exists"
+  ansible.builtin.assert:
+    that:
+      - script_stat.stat.exists
+      - script_stat.stat.isreg
+    fail_msg: >
+      ❌ Script '{{ script_item.script_file }}' NOT found in '{{ script_item.script_dir }}' on {{ target_host_ip }}.
+      Full path checked: {{ script_item.script_dir }}/{{ script_item.script_file }}
+    success_msg: "✅ Script file confirmed: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 3 — Ensure script is executable
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 3 ─ Ensure script is executable (chmod +x)"
+  ansible.builtin.file:
+    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+    mode: "0755"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4 — Execute the script from its directory (chdir)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 4 ─ Execute script: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+  ansible.builtin.shell:
+    cmd: "./{{ script_item.script_file }} {{ script_item.args | default('') }}"
+    chdir: "{{ script_item.script_dir }}"
+  register: script_result
+  ignore_errors: "{{ ignore_script_errors | default(false) }}"
+  async: "{{ script_timeout | default(120) }}"
+  poll: 5
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 5 — Display full STDOUT from the script
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 5 ─ Script STDOUT output"
+  ansible.builtin.debug:
+    msg:
+      - "┌───────────────────── STDOUT ─────────────────────────────────"
+      - "  Script    : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "  Target IP : {{ target_host_ip }}"
+      - "  Exit Code : {{ script_result.rc }}"
+      - "  Status    : {{ '✅ SUCCESS' if script_result.rc == 0 else '❌ FAILED' }}"
+      - "├───────────────────── OUTPUT ─────────────────────────────────"
+      - "{{ script_result.stdout if script_result.stdout | length > 0 else '  (no stdout output)' }}"
+      - "└──────────────────────────────────────────────────────────────"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 6 — Display STDERR (if any)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 6 ─ Script STDERR output (if any)"
+  ansible.builtin.debug:
+    msg:
+      - "┌───────────────────── STDERR ─────────────────────────────────"
+      - "{{ script_result.stderr }}"
+      - "└──────────────────────────────────────────────────────────────"
+  when: script_result.stderr | default('') | length > 0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 7 — Assert success (fail playbook if script returned non-zero)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 7 ─ Assert script completed successfully"
+  ansible.builtin.assert:
+    that:
+      - script_result.rc == 0
+    fail_msg: >
+      ❌ FAILED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      exited with code {{ script_result.rc }} on {{ target_host_ip }}.
+      STDERR: {{ script_result.stderr | default('None') }}
+    success_msg: >
+      ✅ PASSED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      completed successfully (rc=0) on {{ target_host_ip }}.
+  when: not (ignore_script_errors | default(false))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 8 — Pause after execution (configurable)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 8 ─ Post-execution pause ({{ stop_wait_seconds }}s)"
+  ansible.builtin.pause:
+    seconds: "{{ stop_wait_seconds | default(5) }}"

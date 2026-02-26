@@ -1,0 +1,26 @@
+---
+# roles/script_services/tasks/main.yml
+# Entry point — shows header and delegates to stop loop
+
+- name: "Display execution plan"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════╗"
+      - "  ACTION       : STOP SERVICES VIA SHELL SCRIPT                "
+      - "  TARGET IP    : {{ target_host_ip }}                          "
+      - "  TOTAL SCRIPTS: {{ stop_scripts | length }}                   "
+      - "  SCRIPT DIRS  : {{ stop_scripts | map(attribute='script_dir') | list | join(', ') }}"
+      - "╚══════════════════════════════════════════════════════════════╝"
+
+- name: "Execute stop script for each service (loop)"
+  ansible.builtin.include_tasks: execute_script.yml
+  loop: "{{ stop_scripts }}"
+  loop_control:
+    loop_var: script_item
+    label: "{{ script_item.label }} → {{ script_item.script_dir }}/{{ script_item.script_file }}"
+
+- name: "═══════════════ STOP SEQUENCE COMPLETE ═══════════════"
+  ansible.builtin.debug:
+    msg:
+      - "All stop scripts have been executed on {{ target_host_ip }}"
+      - "Services processed: {{ stop_scripts | map(attribute='label') | list | join(', ') }}"

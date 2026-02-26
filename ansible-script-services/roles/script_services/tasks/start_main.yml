@@ -1,0 +1,28 @@
+---
+# roles/script_services/tasks/start_main.yml
+# Entry point for start sequence — loops through start_scripts variable
+
+- name: "Display start execution plan"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════╗"
+      - "  ACTION       : START SERVICES VIA SHELL SCRIPT               "
+      - "  TARGET IP    : {{ target_host_ip }}                          "
+      - "  TOTAL SCRIPTS: {{ start_scripts | length }}                  "
+      - "  SCRIPT DIRS  : {{ start_scripts | map(attribute='script_dir') | list | join(', ') }}"
+      - "╚══════════════════════════════════════════════════════════════╝"
+
+- name: "Execute start script for each service (loop)"
+  ansible.builtin.include_tasks: execute_script.yml
+  vars:
+    stop_wait_seconds: "{{ start_wait_seconds | default(10) }}"
+  loop: "{{ start_scripts }}"
+  loop_control:
+    loop_var: script_item
+    label: "{{ script_item.label }} → {{ script_item.script_dir }}/{{ script_item.script_file }}"
+
+- name: "═══════════════ START SEQUENCE COMPLETE ═══════════════"
+  ansible.builtin.debug:
+    msg:
+      - "All start scripts have been executed on {{ target_host_ip }}"
+      - "Services started: {{ start_scripts | map(attribute='label') | list | join(', ') }}"

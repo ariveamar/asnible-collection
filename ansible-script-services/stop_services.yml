@@ -1,0 +1,61 @@
+---
+# stop_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Playbook : Stop Linux services by executing shell scripts from defined directories
+# Usage    : ansible-playbook -i inventory/hosts.ini stop_services.yml
+#          : ansible-playbook -i inventory/hosts.ini stop_services.yml \
+#                -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "STOP SERVICES — Execute stop scripts from defined directory locations"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    # ── TARGET SERVER IP ──────────────────────────────────────────────────────
+    # This is the IP of the server where scripts will be executed.
+    # Must match ansible_host in inventory/hosts.ini, or pass via -e flag.
+    target_host_ip: "192.168.1.10"
+
+    # ── STOP SCRIPT DIRECTORY LOCATIONS ──────────────────────────────────────
+    # Define each service's stop script path here.
+    # The playbook loops through ALL entries and executes each script.
+    # Fields:
+    #   label       : Friendly name for output/logs
+    #   script_dir  : Full directory path on the target host
+    #   script_file : Shell script filename to execute
+    #   args        : (Optional) Command-line arguments to pass to the script
+    stop_scripts:
+      - label:       "App Service A"
+        script_dir:  "/opt/services/app-a"
+        script_file: "stop.sh"
+        args:        ""
+
+      - label:       "App Service B"
+        script_dir:  "/opt/services/app-b"
+        script_file: "stop.sh"
+        args:        ""
+
+      - label:       "Worker Service"
+        script_dir:  "/home/deploy/worker"
+        script_file: "stop-worker.sh"
+        args:        "--graceful"
+
+      - label:       "API Gateway"
+        script_dir:  "/srv/gateway"
+        script_file: "stop.sh"
+        args:        ""
+
+      - label:       "Background Scheduler"
+        script_dir:  "/opt/scheduler"
+        script_file: "shutdown.sh"
+        args:        ""
+
+    # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
+    stop_wait_seconds: 5        # Pause after each script completes
+    script_timeout: 120         # Max seconds before script execution times out
+    ignore_script_errors: false # Set true to continue if a script fails (rc != 0)
+
+  roles:
+    - script_services

@@ -1,0 +1,71 @@
+---
+# roles/script_services/defaults/main.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# TARGET SERVER IP ADDRESS
+# Defines which server the shell scripts will be executed on.
+# Override via: -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+target_host_ip: "192.168.1.10"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STOP SCRIPT LOCATIONS
+# Each entry defines:
+#   - label       : Human-readable name shown in task output
+#   - script_dir  : Directory on the target host where the script lives
+#   - script_file : Filename of the shell script to execute
+#   - args        : (Optional) Arguments to pass to the script
+# The playbook will loop through all entries and execute each script.
+# ─────────────────────────────────────────────────────────────────────────────
+stop_scripts:
+  - label:       "App Service A"
+    script_dir:  "/opt/services/app-a"
+    script_file: "stop.sh"
+    args:        ""
+
+  - label:       "App Service B"
+    script_dir:  "/opt/services/app-b"
+    script_file: "stop.sh"
+    args:        ""
+
+  - label:       "Worker Service"
+    script_dir:  "/home/deploy/worker"
+    script_file: "stop-worker.sh"
+    args:        "--graceful"
+
+  - label:       "API Gateway"
+    script_dir:  "/srv/gateway"
+    script_file: "stop.sh"
+    args:        ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# START SCRIPT LOCATIONS
+# Same structure as stop_scripts — define which script to run per service.
+# ─────────────────────────────────────────────────────────────────────────────
+start_scripts:
+  - label:       "App Service A"
+    script_dir:  "/opt/services/app-a"
+    script_file: "start.sh"
+    args:        ""
+
+  - label:       "App Service B"
+    script_dir:  "/opt/services/app-b"
+    script_file: "start.sh"
+    args:        ""
+
+  - label:       "Worker Service"
+    script_dir:  "/home/deploy/worker"
+    script_file: "start-worker.sh"
+    args:        "--env production"
+
+  - label:       "API Gateway"
+    script_dir:  "/srv/gateway"
+    script_file: "start.sh"
+    args:        ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION SETTINGS
+# ─────────────────────────────────────────────────────────────────────────────
+script_timeout: 120          # Max seconds to wait for each script to complete
+start_wait_seconds: 10       # Seconds to pause after start before next step
+stop_wait_seconds: 5         # Seconds to pause after stop before next step
+ignore_script_errors: false  # Set true to continue loop even if a script fails
