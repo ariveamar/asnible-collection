@@ -33,7 +33,7 @@
     # IP of the server where the stop scripts will be executed.
     # Must match the ansible_host value defined in inventory/hosts.ini.
     # ─────────────────────────────────────────────────────────────────────────
-    target_host_ip: "192.168.1.10"
+    target_host_ip: "192.168.80.33"
 
     # ── STOP SCRIPT LOCATIONS ─────────────────────────────────────────────────
     # List of all services to stop.
@@ -47,29 +47,21 @@
     # ─────────────────────────────────────────────────────────────────────────
     stop_scripts:
       - label:       "App Service A"
-        script_dir:  "/opt/services/app-a"
-        script_file: "stop.sh"
+        script_dir:  "/home/"
+        script_file: "stop-service.sh"
         args:        ""
 
-      - label:       "App Service B"
-        script_dir:  "/opt/services/app-b"
-        script_file: "stop.sh"
-        args:        ""
+#      - label:       "App Service B"
+#        script_dir:  "/opt/services/app-b"
+#        script_file: "stop.sh"
+#        args:        ""
 
-      - label:       "Worker Service"
-        script_dir:  "/home/deploy/worker"
-        script_file: "stop-worker.sh"
-        args:        "--graceful"
+#      - label:       "Worker Service"
+#        script_dir:  "/home/deploy/worker"
+#        script_file: "stop-worker.sh"
+#        args:        "--graceful"
 
-      - label:       "API Gateway"
-        script_dir:  "/srv/gateway"
-        script_file: "stop.sh"
-        args:        ""
 
-      - label:       "Background Scheduler"
-        script_dir:  "/opt/scheduler"
-        script_file: "shutdown.sh"
-        args:        ""
 
     # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
     stop_wait_seconds: 5         # Pause after each script before verifying
