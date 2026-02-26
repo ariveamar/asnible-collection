@@ -120,13 +120,21 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 8 — FINAL OUTPUT: SHOW RESULT
 # ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 6 ─ Final PID check output (confirm no PID running)"
+- name: "[ {{ service_item.name }} ] STEP 7 ─ Final PID check output (confirm no PID running)"
   ansible.builtin.shell: |
     echo "=== PID Status for service: {{ service_item.name }} ==="
     echo "Timestamp : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "Host IP   : {{ target_host_ip }}"
     echo ""
-    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true)
+    PIDS=$(ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true)
+    PIDS=$(echo "$PIDS" | tr -d '[:space:]')
     if [ -z "$PIDS" ]; then
       echo "STATUS    : ✅ STOPPED — No PID found for '{{ service_item.name }}'"
       echo "PID(s)    : None"
@@ -135,6 +143,8 @@
       echo "PID(s)    : $PIDS"
     fi
     echo "======================================================="
+  args:
+    executable: /bin/bash
   register: final_output
   changed_when: false
 
