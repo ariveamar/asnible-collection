@@ -1,0 +1,24 @@
+---
+# roles/kill_services/tasks/main.yml
+
+- name: "Display target host information"
+  ansible.builtin.debug:
+    msg:
+      - "============================================================"
+      - " TARGET HOST  : {{ target_host_ip }}"
+      - " TOTAL SERVICES TO PROCESS : {{ services_to_stop | length }}"
+      - " SERVICE NAMES : {{ services_to_stop | map(attribute='name') | list | join(', ') }}"
+      - "============================================================"
+
+- name: "Process each service — stop loop"
+  ansible.builtin.include_tasks: stop_service.yml
+  loop: "{{ services_to_stop }}"
+  loop_control:
+    loop_var: service_item
+    label: "{{ service_item.name }}"
+
+- name: "============ FINAL STOP SUMMARY ============"
+  ansible.builtin.debug:
+    msg:
+      - "All services processed on host: {{ target_host_ip }}"
+      - "Services handled: {{ services_to_stop | map(attribute='name') | list | join(', ') }}"

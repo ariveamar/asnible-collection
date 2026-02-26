@@ -1,0 +1,47 @@
+---
+# stop_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Playbook: Stop multiple Linux services by killing PIDs
+# Usage   : ansible-playbook -i inventory/hosts.ini stop_services.yml
+#         : ansible-playbook -i inventory/hosts.ini stop_services.yml -e "target_host_ip=10.0.0.5"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "STOP SERVICES — Kill PIDs on target Linux server"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    # ── Define the target server IP ──────────────────────────────────────────
+    target_host_ip: "192.168.1.10"
+
+    # ── Define ALL services to stop (loop will iterate through each) ─────────
+    services_to_stop:
+      - name: "nginx"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+
+      - name: "myapp"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+
+      - name: "java"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+
+      - name: "python3"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+
+      - name: "node"
+        kill_signal: "TERM"
+        force_kill_enabled: false
+
+    # ── Timing configuration ─────────────────────────────────────────────────
+    stop_wait_seconds: 5
+    force_kill_wait_seconds: 3
+    max_retry_attempts: 3
+    retry_delay_seconds: 3
+
+  roles:
+    - kill_services

@@ -1,0 +1,47 @@
+---
+# start_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Playbook: Start services using shell script
+# Usage   : ansible-playbook -i inventory/hosts.ini start_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "START SERVICES — Run start script on target Linux server"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    target_host_ip: "192.168.1.10"
+
+    services_to_stop:
+      - name: "nginx"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+      - name: "myapp"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+      - name: "java"
+        kill_signal: "TERM"
+        force_kill_enabled: true
+
+    start_script_path: "/home/start-service.sh"
+    start_wait_seconds: 10
+
+  tasks:
+    - name: "Display target host and start script"
+      ansible.builtin.debug:
+        msg:
+          - "============================================================"
+          - " TARGET HOST  : {{ target_host_ip }}"
+          - " START SCRIPT : {{ start_script_path }}"
+          - " SERVICES     : {{ services_to_stop | map(attribute='name') | list | join(', ') }}"
+          - "============================================================"
+
+    - name: "Start each service via shell script (loop)"
+      ansible.builtin.include_role:
+        name: kill_services
+        tasks_from: start_service.yml
+      loop: "{{ services_to_stop }}"
+      loop_control:
+        loop_var: service_item
+        label: "{{ service_item.name }}"

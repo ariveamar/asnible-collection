@@ -1,0 +1,75 @@
+---
+# roles/kill_services/tasks/start_service.yml
+# Starts service using shell script, validates it's running
+
+- name: "[ {{ service_item.name | upper }} ] ── BEGIN START SEQUENCE"
+  ansible.builtin.debug:
+    msg:
+      - "────────────────────────────────────────────────────"
+      - "  Service      : {{ service_item.name }}"
+      - "  Target IP    : {{ target_host_ip }}"
+      - "  Start Script : {{ start_script_path }}"
+      - "────────────────────────────────────────────────────"
+
+- name: "[ {{ service_item.name }} ] STEP 1 ─ Verify start script exists"
+  ansible.builtin.stat:
+    path: "{{ start_script_path }}"
+  register: script_stat
+
+- name: "[ {{ service_item.name }} ] STEP 1 ─ Assert script exists"
+  ansible.builtin.assert:
+    that:
+      - script_stat.stat.exists
+    fail_msg: "❌ Start script '{{ start_script_path }}' not found on {{ target_host_ip }}"
+    success_msg: "✅ Start script found: {{ start_script_path }}"
+
+- name: "[ {{ service_item.name }} ] STEP 2 ─ Ensure start script is executable"
+  ansible.builtin.file:
+    path: "{{ start_script_path }}"
+    mode: "0755"
+
+- name: "[ {{ service_item.name }} ] STEP 3 ─ Execute start script"
+  ansible.builtin.shell: "{{ start_script_path }}"
+  register: start_result
+  changed_when: start_result.rc == 0
+
+- name: "[ {{ service_item.name }} ] STEP 3 ─ Show start script output"
+  ansible.builtin.debug:
+    msg:
+      - "Return Code : {{ start_result.rc }}"
+      - "STDOUT      : {{ start_result.stdout }}"
+      - "STDERR      : {{ start_result.stderr | default('None') }}"
+
+- name: "[ {{ service_item.name }} ] STEP 4 ─ Wait {{ start_wait_seconds }}s for process to initialize"
+  ansible.builtin.pause:
+    seconds: "{{ start_wait_seconds }}"
+
+- name: "[ {{ service_item.name }} ] STEP 5 ─ Verify process is running after start"
+  ansible.builtin.shell: |
+    echo "=== PID Status for service: {{ service_item.name }} ==="
+    echo "Timestamp : $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Host IP   : {{ target_host_ip }}"
+    echo ""
+    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true)
+    if [ -n "$PIDS" ]; then
+      echo "STATUS    : ✅ RUNNING — PIDs found for '{{ service_item.name }}'"
+      echo "PID(s)    : $PIDS"
+    else
+      echo "STATUS    : ❌ NOT RUNNING — No PID found for '{{ service_item.name }}'"
+      echo "PID(s)    : None"
+    fi
+    echo "======================================================="
+    echo "$PIDS"
+  register: post_start_check
+  changed_when: false
+
+- name: "[ {{ service_item.name }} ] STEP 5 ─ Display post-start PID result"
+  ansible.builtin.debug:
+    msg: "{{ post_start_check.stdout_lines }}"
+
+- name: "[ {{ service_item.name }} ] STEP 6 ─ ASSERT — Service must be running after start"
+  ansible.builtin.assert:
+    that:
+      - post_start_check.stdout | length > 0
+    fail_msg: "❌ FAILED: Service '{{ service_item.name }}' is NOT RUNNING after start on {{ target_host_ip }}"
+    success_msg: "✅ PASSED: Service '{{ service_item.name }}' is confirmed RUNNING on {{ target_host_ip }}"

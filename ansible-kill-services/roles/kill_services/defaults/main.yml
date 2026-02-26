@@ -1,0 +1,41 @@
+---
+# roles/kill_services/defaults/main.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# TARGET HOST IP ADDRESS
+# Override this variable to point to the specific server where PIDs will be killed.
+# Can also be passed via -e flag: -e "target_host_ip=192.168.1.10"
+# ─────────────────────────────────────────────────────────────────────────────
+target_host_ip: "192.168.1.10"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SERVICE LIST
+# Define all service names to stop. The playbook will loop through each one.
+# These are the process names used to match and kill PIDs via pgrep/pkill.
+# ─────────────────────────────────────────────────────────────────────────────
+services_to_stop:
+  - name: "nginx"
+    kill_signal: "TERM"         # TERM = graceful, KILL = force
+    force_kill_enabled: true    # Force kill with SIGKILL if SIGTERM doesn't stop it
+  - name: "myapp"
+    kill_signal: "TERM"
+    force_kill_enabled: true
+  - name: "java"
+    kill_signal: "TERM"
+    force_kill_enabled: true
+  - name: "python"
+    kill_signal: "TERM"
+    force_kill_enabled: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TIMING SETTINGS
+# ─────────────────────────────────────────────────────────────────────────────
+stop_wait_seconds: 5        # Seconds to wait after SIGTERM before re-checking
+force_kill_wait_seconds: 3  # Seconds to wait after SIGKILL before final check
+max_retry_attempts: 3       # How many times to retry checking if process stopped
+retry_delay_seconds: 3      # Seconds between each retry
+
+# ─────────────────────────────────────────────────────────────────────────────
+# START SERVICE SETTINGS (for start play)
+# ─────────────────────────────────────────────────────────────────────────────
+start_script_path: "/home/start-service.sh"
+start_wait_seconds: 10      # Seconds to wait after start before verifying
