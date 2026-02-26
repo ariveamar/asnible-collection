@@ -33,7 +33,7 @@
     # IP of the server where the start scripts will be executed.
     # Must match the ansible_host value defined in inventory/hosts.ini.
     # ─────────────────────────────────────────────────────────────────────────
-    target_host_ip: "192.168.1.10"
+    target_host_ip: "192.168.80.33"
 
     # ── START SCRIPT LOCATIONS ────────────────────────────────────────────────
     # List of all services to start.
@@ -46,30 +46,30 @@
     #   args        : Optional arguments passed to the script (use "" for none)
     # ─────────────────────────────────────────────────────────────────────────
     start_scripts:
-      - label:       "App Service A"
-        script_dir:  "/opt/services/app-a"
-        script_file: "start.sh"
+      - label:       "Node Exporter"
+        script_dir:  "/home/"
+        script_file: "start-service.sh"
         args:        ""
 
-      - label:       "App Service B"
-        script_dir:  "/opt/services/app-b"
-        script_file: "start.sh"
-        args:        ""
+#      - label:       "App Service B"
+#        script_dir:  "/opt/services/app-b"
+#        script_file: "start.sh"
+#        args:        ""
 
-      - label:       "Worker Service"
-        script_dir:  "/home/deploy/worker"
-        script_file: "start-worker.sh"
-        args:        "--env production"
+#      - label:       "Worker Service"
+#        script_dir:  "/home/deploy/worker"
+#        script_file: "start-worker.sh"
+#        args:        "--env production"
 
-      - label:       "API Gateway"
-        script_dir:  "/srv/gateway"
-        script_file: "start.sh"
-        args:        ""
+#      - label:       "API Gateway"
+#        script_dir:  "/srv/gateway"
+#        script_file: "start.sh"
+#        args:        ""
 
-      - label:       "Background Scheduler"
-        script_dir:  "/opt/scheduler"
-        script_file: "startup.sh"
-        args:        ""
+ #     - label:       "Background Scheduler"
+ #       script_dir:  "/opt/scheduler"
+ #       script_file: "startup.sh"
+ #       args:        ""
 
     # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
     start_wait_seconds: 10       # Seconds to wait after each script before verifying
