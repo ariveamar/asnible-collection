@@ -17,43 +17,65 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 2 — CHECK INITIAL PID
+# FIX: Use 'ps aux | grep -w' pipeline instead of pgrep.
+#      grep -v grep/ansible/sshd/python excludes the shell, Ansible process
+#      and SSH daemon from results — avoids the $$ Jinja2 expansion bug.
 # ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 1A ─ Find running PIDs"
+- name: "[ {{ service_item.name }} ] STEP 1 ─ Find running PIDs"
   ansible.builtin.shell: |
-    pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true
+    set -o pipefail
+    ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true
+  args:
+    executable: /bin/bash
   register: initial_pids
   changed_when: false
 
-- name: "[ {{ service_item.name }} ] STEP 1B ─ Show initial PID status"
+- name: "[ {{ service_item.name }} ] STEP 1 ─ Show initial PID status"
   ansible.builtin.debug:
     msg:
       - "Service    : {{ service_item.name }}"
-      - "Status     : {{ 'RUNNING' if initial_pids.stdout | length > 0 else 'NOT RUNNING / ALREADY STOPPED' }}"
-      - "PID(s)     : {{ initial_pids.stdout_lines | join(', ') if initial_pids.stdout | length > 0 else 'None' }}"
+      - "Status     : {{ 'RUNNING' if initial_pids.stdout | trim | length > 0 else 'NOT RUNNING / ALREADY STOPPED' }}"
+      - "PID(s)     : {{ initial_pids.stdout_lines | join(', ') if initial_pids.stdout | trim | length > 0 else 'None' }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3 — SEND SIGTERM (graceful kill)
+# STEP 3 — SEND SIGTERM
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ service_item.name }} ] STEP 2 ─ Send SIG{{ service_item.kill_signal }} to all matching PIDs"
   ansible.builtin.shell: |
-    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd")
+    set -o pipefail
+    PIDS=$(ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}')
     if [ -n "$PIDS" ]; then
-      echo "Killing PIDs: $PIDS"
+      echo "Sending SIG{{ service_item.kill_signal }} to PIDs: $PIDS"
       for PID in $PIDS; do
-        echo "  → Sending SIG{{ service_item.kill_signal }} to PID $PID"
-        kill -{{ service_item.kill_signal }} $PID 2>/dev/null || true
+        echo "  → kill -{{ service_item.kill_signal }} PID $PID"
+        kill -{{ service_item.kill_signal }} "$PID" 2>/dev/null || true
       done
     else
       echo "No PIDs found for {{ service_item.name }} — skipping kill"
     fi
+  args:
+    executable: /bin/bash
   register: kill_output
-  changed_when: "'Killing PIDs' in kill_output.stdout"
-  when: initial_pids.stdout | length > 0
+  changed_when: "'Sending SIG' in kill_output.stdout"
+  when: initial_pids.stdout | trim | length > 0
 
 - name: "[ {{ service_item.name }} ] STEP 2 ─ Show kill output"
   ansible.builtin.debug:
     msg: "{{ kill_output.stdout_lines }}"
-  when: initial_pids.stdout | length > 0
+  when: initial_pids.stdout | trim | length > 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 4 — WAIT for graceful shutdown
@@ -61,64 +83,115 @@
 - name: "[ {{ service_item.name }} ] STEP 3 ─ Wait {{ stop_wait_seconds }}s for graceful shutdown"
   ansible.builtin.pause:
     seconds: "{{ stop_wait_seconds }}"
-  when: initial_pids.stdout | length > 0
+  when: initial_pids.stdout | trim | length > 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 — RECHECK after SIGTERM
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ service_item.name }} ] STEP 4 ─ Re-check PIDs after graceful kill"
   ansible.builtin.shell: |
-    pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true
+    set -o pipefail
+    ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true
+  args:
+    executable: /bin/bash
   register: recheck_pids
   changed_when: false
-  when: initial_pids.stdout | length > 0
+  when: initial_pids.stdout | trim | length > 0
 
 - name: "[ {{ service_item.name }} ] STEP 4 ─ Show recheck result"
   ansible.builtin.debug:
     msg:
       - "Re-check after SIG{{ service_item.kill_signal }}:"
-      - "Status  : {{ 'STILL RUNNING — will force kill' if (recheck_pids.stdout | default('') | length > 0) else 'STOPPED ✓' }}"
-      - "PID(s)  : {{ recheck_pids.stdout_lines | join(', ') if (recheck_pids.stdout | default('') | length > 0) else 'None' }}"
-  when: initial_pids.stdout | length > 0
+      - "Status  : {{ 'STILL RUNNING — will force kill' if (recheck_pids.stdout | default('') | trim | length > 0) else 'STOPPED ✓' }}"
+      - "PID(s)  : {{ recheck_pids.stdout_lines | join(', ') if (recheck_pids.stdout | default('') | trim | length > 0) else 'None' }}"
+  when: initial_pids.stdout | trim | length > 0
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 6 — FORCE KILL with SIGKILL (if still running and force_kill_enabled)
+# STEP 6 — FORCE KILL with SIGKILL (if still running)
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ service_item.name }} ] STEP 5 ─ Force kill with SIGKILL (process still running)"
   ansible.builtin.shell: |
-    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd")
+    set -o pipefail
+    PIDS=$(ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}')
     if [ -n "$PIDS" ]; then
       echo "Force killing PIDs: $PIDS"
       for PID in $PIDS; do
-        echo "  → Sending SIGKILL to PID $PID"
-        kill -9 $PID 2>/dev/null || true
+        echo "  → kill -9 PID $PID"
+        kill -9 "$PID" 2>/dev/null || true
       done
     fi
+  args:
+    executable: /bin/bash
   register: force_kill_output
   changed_when: "'Force killing' in force_kill_output.stdout"
   when:
-    - initial_pids.stdout | length > 0
+    - initial_pids.stdout | trim | length > 0
     - service_item.force_kill_enabled | bool
-    - recheck_pids.stdout | default('') | length > 0
+    - recheck_pids.stdout | default('') | trim | length > 0
 
 - name: "[ {{ service_item.name }} ] STEP 5 ─ Show force kill output"
   ansible.builtin.debug:
     msg: "{{ force_kill_output.stdout_lines }}"
   when:
     - force_kill_output is defined
-    - force_kill_output.stdout | default('') | length > 0
+    - force_kill_output.stdout | default('') | trim | length > 0
 
 - name: "[ {{ service_item.name }} ] STEP 5 ─ Wait {{ force_kill_wait_seconds }}s after SIGKILL"
   ansible.builtin.pause:
     seconds: "{{ force_kill_wait_seconds }}"
   when:
-    - initial_pids.stdout | length > 0
+    - initial_pids.stdout | trim | length > 0
     - service_item.force_kill_enabled | bool
-    - recheck_pids.stdout | default('') | length > 0
-
+    - recheck_pids.stdout | default('') | trim | length > 0
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 8 — FINAL OUTPUT: SHOW RESULT
+# STEP 7 — RETRY VALIDATION
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ service_item.name }} ] STEP 6 ─ Validate process is fully stopped (retry {{ max_retry_attempts }}x)"
+  ansible.builtin.shell: |
+    set -o pipefail
+    PIDS=$(ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true)
+    PIDS=$(echo "$PIDS" | tr -d '[:space:]')
+    if [ -z "$PIDS" ]; then
+      echo "STOPPED"
+    else
+      echo "STILL_RUNNING: $PIDS"
+      exit 1
+    fi
+  args:
+    executable: /bin/bash
+  register: final_validation
+  retries: "{{ max_retry_attempts }}"
+  delay: "{{ retry_delay_seconds }}"
+  until: final_validation.rc == 0
+  changed_when: false
+  ignore_errors: true
+  when: initial_pids.stdout | trim | length > 0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 8 — FINAL OUTPUT
+# FIX: tr -d '[:space:]' strips all whitespace from PIDS before the
+#      [ -z ] check — prevents blank lines from being treated as a PID.
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ service_item.name }} ] STEP 7 ─ Final PID check output (confirm no PID running)"
   ansible.builtin.shell: |
@@ -152,4 +225,25 @@
   ansible.builtin.debug:
     msg: "{{ final_output.stdout_lines }}"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 9 — ASSERT
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ service_item.name }} ] STEP 8 ─ ASSERT — Service must be fully stopped"
+  ansible.builtin.assert:
+    that:
+      - final_validation.rc is not defined or final_validation.rc == 0
+    fail_msg: >
+      ❌ FAILED: Service '{{ service_item.name }}' is STILL RUNNING on {{ target_host_ip }}
+      after {{ max_retry_attempts }} retries. PIDs: {{ final_validation.stdout | default('unknown') }}.
+      Manual intervention required!
+    success_msg: >
+      ✅ PASSED: Service '{{ service_item.name }}' is confirmed STOPPED on {{ target_host_ip }}.
+      No stale PIDs detected.
+  when: initial_pids.stdout | trim | length > 0
 
+- name: "[ {{ service_item.name }} ] ── Service was not running — nothing to stop"
+  ansible.builtin.debug:
+    msg:
+      - "Service '{{ service_item.name }}' was already NOT RUNNING on {{ target_host_ip }}."
+      - "No kill action was needed."
+  when: initial_pids.stdout | trim | length == 0
