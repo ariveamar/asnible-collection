@@ -11,18 +11,11 @@
   gather_facts: false
 
   vars:
-    target_host_ip: "192.168.1.10"
+    target_host_ip: "192.168.80.33"
 
-    services_to_stop:
+    services_to_start:
       - name: "nginx"
-        kill_signal: "TERM"
-        force_kill_enabled: true
       - name: "myapp"
-        kill_signal: "TERM"
-        force_kill_enabled: true
-      - name: "java"
-        kill_signal: "TERM"
-        force_kill_enabled: true
 
     start_script_path: "/home/start-service.sh"
     start_wait_seconds: 10
@@ -34,14 +27,14 @@
           - "============================================================"
           - " TARGET HOST  : {{ target_host_ip }}"
           - " START SCRIPT : {{ start_script_path }}"
-          - " SERVICES     : {{ services_to_stop | map(attribute='name') | list | join(', ') }}"
+          - " SERVICES     : {{ services_to_start | map(attribute='name') | list | join(', ') }}"
           - "============================================================"
 
     - name: "Start each service via shell script (loop)"
       ansible.builtin.include_role:
-        name: kill_services
+        name: start_services
         tasks_from: start_service.yml
-      loop: "{{ services_to_stop }}"
+      loop: "{{ services_to_start }}"
       loop_control:
         loop_var: service_item
         label: "{{ service_item.name }}"
