@@ -163,7 +163,7 @@
     echo "Script     : {{ script_item.script_dir }}/{{ script_item.script_file }}"
     echo ""
     PIDS=$(ps aux \
-      | grep -w "{{ script_item.script_file | replace('.sh','') }}" \
+      | grep -w "{{ script_item.process_name | replace('.sh','') }}" \
       | grep -v grep \
       | grep -v ansible \
       | grep -v sshd \
