@@ -1,0 +1,27 @@
+---
+# roles/stop_services/tasks/main.yml
+# Entry point — prints execution plan then loops through all stop scripts
+
+- name: "Display execution plan"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════════╗"
+      - "  ACTION        : STOP SERVICES VIA SHELL SCRIPT                   "
+      - "  TARGET IP     : {{ target_host_ip }}                             "
+      - "  TOTAL SCRIPTS : {{ stop_scripts | length }}                      "
+      - "  SERVICES      : {{ stop_scripts | map(attribute='label') | list | join(', ') }}"
+      - "╚══════════════════════════════════════════════════════════════════╝"
+
+- name: "Execute stop script for each service (loop)"
+  ansible.builtin.include_tasks: stop_service.yml
+  loop: "{{ stop_scripts }}"
+  loop_control:
+    loop_var: script_item
+    label: "{{ script_item.label }} → {{ script_item.script_dir }}/{{ script_item.script_file }}"
+
+- name: "════════════════ STOP SEQUENCE COMPLETE ════════════════"
+  ansible.builtin.debug:
+    msg:
+      - "All stop scripts have been executed on {{ target_host_ip }}"
+      - "Services processed : {{ stop_scripts | map(attribute='label') | list | join(', ') }}"
+      - "Timestamp          : {{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"

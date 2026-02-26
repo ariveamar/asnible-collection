@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: stop_services
+  description: "Stop Linux services by executing shell scripts from defined directory paths, with full stdout output and post-stop verification"
+  min_ansible_version: "2.9"
+  platforms:
+    - name: EL
+      versions: [7, 8, 9]
+    - name: Ubuntu
+      versions: [18, 20, 22]
+    - name: Debian
+      versions: [10, 11, 12]
+dependencies: []

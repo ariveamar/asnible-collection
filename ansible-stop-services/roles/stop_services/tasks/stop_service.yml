@@ -1,0 +1,175 @@
+---
+# roles/stop_services/tasks/stop_service.yml
+# Executes a single stop script from its defined directory.
+# Steps: banner → validate dir → validate file → chmod → execute → show stdout/stderr → assert → verify stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BANNER
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label | upper }} ] ── BEGIN STOP SEQUENCE"
+  ansible.builtin.debug:
+    msg:
+      - "┌────────────────────────────────────────────────────────────────┐"
+      - "  Label        : {{ script_item.label }}"
+      - "  Target IP    : {{ target_host_ip }}"
+      - "  Directory    : {{ script_item.script_dir }}"
+      - "  Script File  : {{ script_item.script_file }}"
+      - "  Arguments    : {{ script_item.args | default('(none)') }}"
+      - "  Full Path    : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "└────────────────────────────────────────────────────────────────┘"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1 — Validate directory exists
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 1 ─ Check script directory exists"
+  ansible.builtin.stat:
+    path: "{{ script_item.script_dir }}"
+  register: dir_stat
+
+- name: "[ {{ script_item.label }} ] STEP 1 ─ Assert directory exists"
+  ansible.builtin.assert:
+    that:
+      - dir_stat.stat.exists
+      - dir_stat.stat.isdir
+    fail_msg: >
+      ❌ Directory '{{ script_item.script_dir }}' does NOT exist on {{ target_host_ip }}.
+      Please verify script_dir in your variable definition.
+    success_msg: "✅ Directory confirmed: {{ script_item.script_dir }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2 — Validate script file exists
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 2 ─ Check script file exists"
+  ansible.builtin.stat:
+    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+  register: script_stat
+
+- name: "[ {{ script_item.label }} ] STEP 2 ─ Assert script file exists"
+  ansible.builtin.assert:
+    that:
+      - script_stat.stat.exists
+      - script_stat.stat.isreg
+    fail_msg: >
+      ❌ Script '{{ script_item.script_file }}' NOT found in '{{ script_item.script_dir }}' on {{ target_host_ip }}.
+      Full path checked: {{ script_item.script_dir }}/{{ script_item.script_file }}
+    success_msg: "✅ Script file confirmed: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 3 — Ensure script is executable
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 3 ─ Ensure script is executable (chmod 0755)"
+  ansible.builtin.file:
+    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+    mode: "0755"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4 — Execute the stop script from its own directory (chdir)
+# chdir ensures scripts using relative paths inside them work correctly.
+# async + poll allows real-time progress without blocking indefinitely.
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 4 ─ Execute stop script: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+  ansible.builtin.shell:
+    cmd: "./{{ script_item.script_file }} {{ script_item.args | default('') }}"
+    chdir: "{{ script_item.script_dir }}"
+  args:
+    executable: /bin/bash
+  register: script_result
+  ignore_errors: "{{ ignore_script_errors | default(false) }}"
+  async: "{{ script_timeout | default(120) }}"
+  poll: 5
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 5 — Display full STDOUT from the script
+# Prints every line the script sent to standard output.
+# stdout_lines is used so each line appears on its own row in the output.
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 5 ─ Script STDOUT output"
+  ansible.builtin.debug:
+    msg:
+      - "┌─────────────────────────── STDOUT ────────────────────────────┐"
+      - "  Service   : {{ script_item.label }}"
+      - "  Script    : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "  Target IP : {{ target_host_ip }}"
+      - "  Exit Code : {{ script_result.rc }}"
+      - "  Status    : {{ '✅ SUCCESS (rc=0)' if script_result.rc == 0 else '❌ FAILED (rc=' + script_result.rc | string + ')' }}"
+      - "├───────────────────────────────────────────────────────────────┤"
+      - "{{ script_result.stdout_lines if script_result.stdout_lines | length > 0 else ['  (no stdout output from script)'] }}"
+      - "└───────────────────────────────────────────────────────────────┘"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 6 — Display STDERR (only shown when stderr is non-empty)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 6 ─ Script STDERR output"
+  ansible.builtin.debug:
+    msg:
+      - "┌─────────────────────────── STDERR ────────────────────────────┐"
+      - "{{ script_result.stderr_lines }}"
+      - "└───────────────────────────────────────────────────────────────┘"
+  when: script_result.stderr | default('') | trim | length > 0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 7 — Assert script exited with rc=0
+# Fails the playbook if the stop script returned a non-zero exit code.
+# Set ignore_script_errors: true to skip this and continue the loop.
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 7 ─ Assert script completed successfully (rc=0)"
+  ansible.builtin.assert:
+    that:
+      - script_result.rc == 0
+    fail_msg: >
+      ❌ FAILED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      exited with code {{ script_result.rc }} on {{ target_host_ip }}.
+      STDERR: {{ script_result.stderr | default('None') }}
+    success_msg: >
+      ✅ PASSED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      completed successfully (rc=0) on {{ target_host_ip }}.
+  when: not (ignore_script_errors | default(false))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 8 — Wait after stop script runs before verifying
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 8 ─ Wait {{ stop_wait_seconds }}s after stop script"
+  ansible.builtin.pause:
+    seconds: "{{ stop_wait_seconds | default(5) }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 9 — Verify the process is no longer running after stop
+# Safe ps+grep pipeline — avoids the $$ Jinja2 expansion bug.
+# grep -w matches whole word only; excludes grep/ansible/sshd/python.
+# tr -d '[:space:]' strips whitespace so blank output never gives false-positive.
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "[ {{ script_item.label }} ] STEP 9 ─ Verify process is stopped after script execution"
+  ansible.builtin.shell: |
+    set -o pipefail
+    PIDS=$(ps aux \
+      | grep -w "{{ script_item.script_file | replace('.sh','') }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true)
+    PIDS=$(echo "$PIDS" | tr -d '[:space:]')
+
+    echo "=== Process Status for service: {{ script_item.label }} ==="
+    echo "Timestamp  : $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Host IP    : {{ target_host_ip }}"
+    echo "Script     : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+    echo ""
+    if [ -z "$PIDS" ]; then
+      echo "STATUS     : ✅ STOPPED — No process found for '{{ script_item.label }}'"
+      echo "PID(s)     : None"
+    else
+      echo "STATUS     : ⚠️  PROCESS STILL DETECTED"
+      echo "PID(s)     : $PIDS"
+      echo "NOTE       : The stop script ran (rc={{ script_result.rc }}) but process may still be shutting down."
+    fi
+    echo "============================================================="
+  args:
+    executable: /bin/bash
+  register: post_stop_verify
+  changed_when: false
+
+- name: "[ {{ script_item.label }} ] STEP 9 ─ Display final stop verification result"
+  ansible.builtin.debug:
+    msg: "{{ post_stop_verify.stdout_lines }}"
