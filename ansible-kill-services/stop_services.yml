@@ -13,29 +13,29 @@
 
   vars:
     # ── Define the target server IP ──────────────────────────────────────────
-    target_host_ip: "192.168.1.10"
+    target_host_ip: "192.168.8.33"
 
     # ── Define ALL services to stop (loop will iterate through each) ─────────
     services_to_stop:
-      - name: "nginx"
-        kill_signal: "TERM"
-        force_kill_enabled: true
-
-      - name: "myapp"
-        kill_signal: "TERM"
-        force_kill_enabled: true
-
-      - name: "java"
-        kill_signal: "TERM"
-        force_kill_enabled: true
-
-      - name: "python3"
-        kill_signal: "TERM"
-        force_kill_enabled: true
-
-      - name: "node"
+      - name: "node_exporter"
         kill_signal: "TERM"
         force_kill_enabled: false
+
+#      - name: "myapp"
+#        kill_signal: "TERM"
+#        force_kill_enabled: true
+
+#      - name: "java"
+#        kill_signal: "TERM"
+#        force_kill_enabled: true
+
+#      - name: "python3"
+#        kill_signal: "TERM"
+#        force_kill_enabled: true
+
+#      - name: "node"
+#        kill_signal: "TERM"
+#        force_kill_enabled: false
 
     # ── Timing configuration ─────────────────────────────────────────────────
     stop_wait_seconds: 5
