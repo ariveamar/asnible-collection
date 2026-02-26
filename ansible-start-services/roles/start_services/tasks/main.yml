@@ -17,7 +17,7 @@
   loop: "{{ start_scripts }}"
   loop_control:
     loop_var: script_item
-    label: "{{ script_item.label }} → {{ script_item.script_dir }}/{{ script_item.script_file }}"
+    label: "{{ script_item.label }} → {{ script_item.process_name }} → {{ script_item.script_dir }}/{{ script_item.script_file }}"
 
 - name: "════════════════ START SEQUENCE COMPLETE ════════════════"
   ansible.builtin.debug:
