@@ -50,16 +50,25 @@
     echo "Timestamp : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "Host IP   : {{ target_host_ip }}"
     echo ""
-    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true)
-    if [ -n "$PIDS" ]; then
-      echo "STATUS    : ✅ RUNNING — PIDs found for '{{ service_item.name }}'"
-      echo "PID(s)    : $PIDS"
-    else
-      echo "STATUS    : ❌ NOT RUNNING — No PID found for '{{ service_item.name }}'"
+    PIDS=$(ps aux \
+      | grep -w "{{ service_item.name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      | awk '{print $2}' \
+      || true)
+    PIDS=$(echo "$PIDS" | tr -d '[:space:]')
+    if [ -z "$PIDS" ]; then
+      echo "STATUS    : ✅ STOPPED — No PID found for '{{ service_item.name }}'"
       echo "PID(s)    : None"
+    else
+      echo "STATUS    : ❌ STILL RUNNING — PIDs found: $PIDS"
+      echo "PID(s)    : $PIDS"
     fi
     echo "======================================================="
-    echo "$PIDS"
+  args:
+    executable: /bin/bash
   register: post_start_check
   changed_when: false
 
