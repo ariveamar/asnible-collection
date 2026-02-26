@@ -50,6 +50,7 @@
         script_dir:  "/home/"
         script_file: "start-service.sh"
         args:        ""
+        process_name: "node_exporter"
 
 #      - label:       "App Service B"
 #        script_dir:  "/opt/services/app-b"
