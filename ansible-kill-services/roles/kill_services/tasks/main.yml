@@ -16,12 +16,9 @@
   loop_control:
     loop_var: service_item
     label: "{{ service_item.name }}"
-    
-- name: "Process each service — start loop"
-  ansible.builtin.include_tasks: start_service.yml
-  loop: "{{ services_to_start }}"
-  loop_control:
-    loop_var: service_item
-    label: "{{ service_item.name }}"
 
-
+- name: "============ FINAL STOP SUMMARY ============"
+  ansible.builtin.debug:
+    msg:
+      - "All services processed on host: {{ target_host_ip }}"
+      - "Services handled: {{ services_to_stop | map(attribute='name') | list | join(', ') }}"
