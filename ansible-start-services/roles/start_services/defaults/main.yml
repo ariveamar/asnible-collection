@@ -1,0 +1,53 @@
+---
+# roles/start_services/defaults/main.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# TARGET SERVER IP ADDRESS
+# This defines which server the start scripts will be executed on.
+# Must match the ansible_host value in inventory/hosts.ini.
+# Override at runtime via: -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+target_host_ip: "192.168.1.10"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# START SCRIPT LOCATIONS
+# Define each service start script here.
+# The playbook loops through ALL entries and executes each script in order.
+#
+# Fields per entry:
+#   label       : Human-readable service name shown in task output and logs
+#   script_dir  : Full directory path on the target host where the script lives
+#   script_file : Filename of the shell script to execute
+#   args        : (Optional) Arguments to pass to the script. Use "" for none.
+# ─────────────────────────────────────────────────────────────────────────────
+start_scripts:
+  - label:       "App Service A"
+    script_dir:  "/opt/services/app-a"
+    script_file: "start.sh"
+    args:        ""
+
+  - label:       "App Service B"
+    script_dir:  "/opt/services/app-b"
+    script_file: "start.sh"
+    args:        ""
+
+  - label:       "Worker Service"
+    script_dir:  "/home/deploy/worker"
+    script_file: "start-worker.sh"
+    args:        "--env production"
+
+  - label:       "API Gateway"
+    script_dir:  "/srv/gateway"
+    script_file: "start.sh"
+    args:        ""
+
+  - label:       "Background Scheduler"
+    script_dir:  "/opt/scheduler"
+    script_file: "startup.sh"
+    args:        ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION SETTINGS
+# ─────────────────────────────────────────────────────────────────────────────
+start_wait_seconds: 10       # Seconds to pause after each script runs (let service initialise)
+script_timeout: 120          # Max seconds allowed for each script to complete
+ignore_script_errors: false  # Set true to continue loop even if a script fails (rc != 0)
