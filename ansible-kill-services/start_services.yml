@@ -14,8 +14,7 @@
     target_host_ip: "192.168.80.33"
 
     services_to_start:
-      - name: "nginx"
-      - name: "myapp"
+      - name: "node_exporter"
 
     start_script_path: "/home/start-service.sh"
     start_wait_seconds: 10
