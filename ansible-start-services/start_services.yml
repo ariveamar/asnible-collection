@@ -46,7 +46,7 @@
     #   args        : Optional arguments passed to the script (use "" for none)
     # ─────────────────────────────────────────────────────────────────────────
     start_scripts:
-      - label:       "Node Exporter"
+      - label:       "node_exporter"
         script_dir:  "/home/"
         script_file: "start-service.sh"
         args:        ""
