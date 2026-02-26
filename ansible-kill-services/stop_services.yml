@@ -38,7 +38,7 @@
 #        force_kill_enabled: false
 
     # ── Timing configuration ─────────────────────────────────────────────────
-    stop_wait_seconds: 5
+    stop_wait_seconds: 10
     force_kill_wait_seconds: 3
     max_retry_attempts: 3
     retry_delay_seconds: 3
