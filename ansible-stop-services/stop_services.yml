@@ -46,7 +46,7 @@
     #   args        : Optional arguments passed to the script (use "" for none)
     # ─────────────────────────────────────────────────────────────────────────
     stop_scripts:
-      - label:       "App Service A"
+      - label:       "node_exporter"
         script_dir:  "/home/"
         script_file: "stop-service.sh"
         args:        ""
