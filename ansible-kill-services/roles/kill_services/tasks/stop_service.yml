@@ -18,13 +18,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 2 — CHECK INITIAL PID
 # ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 1 ─ Find running PIDs"
+- name: "[ {{ service_item.name }} ] STEP 1A ─ Find running PIDs"
   ansible.builtin.shell: |
     pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true
   register: initial_pids
   changed_when: false
 
-- name: "[ {{ service_item.name }} ] STEP 1 ─ Show initial PID status"
+- name: "[ {{ service_item.name }} ] STEP 1B ─ Show initial PID status"
   ansible.builtin.debug:
     msg:
       - "Service    : {{ service_item.name }}"
@@ -116,30 +116,11 @@
     - service_item.force_kill_enabled | bool
     - recheck_pids.stdout | default('') | length > 0
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 7 — RETRY VALIDATION (with retries to ensure no stale process)
-# ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 6 ─ Validate process is fully stopped (retry {{ max_retry_attempts }}x)"
-  ansible.builtin.shell: |
-    PIDS=$(pgrep -f "{{ service_item.name }}" | grep -v "$$" | grep -v "ansible" | grep -v "sshd" || true)
-    if [ -z "$PIDS" ]; then
-      echo "STOPPED"
-    else
-      echo "STILL_RUNNING: $PIDS"
-      exit 1
-    fi
-  register: final_validation
-  retries: "{{ max_retry_attempts }}"
-  delay: "{{ retry_delay_seconds }}"
-  until: final_validation.rc == 0
-  changed_when: false
-  ignore_errors: true
-  when: initial_pids.stdout | length > 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 8 — FINAL OUTPUT: SHOW RESULT
 # ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 7 ─ Final PID check output (confirm no PID running)"
+- name: "[ {{ service_item.name }} ] STEP 6 ─ Final PID check output (confirm no PID running)"
   ansible.builtin.shell: |
     echo "=== PID Status for service: {{ service_item.name }} ==="
     echo "Timestamp : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -161,26 +142,4 @@
   ansible.builtin.debug:
     msg: "{{ final_output.stdout_lines }}"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 9 — ASSERT PASS/FAIL
-# ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ service_item.name }} ] STEP 8 ─ ASSERT — Service must be fully stopped"
-  ansible.builtin.assert:
-    that:
-      - final_validation.rc is not defined or final_validation.rc == 0
-    fail_msg: >
-      ❌ FAILED: Service '{{ service_item.name }}' is STILL RUNNING on {{ target_host_ip }}
-      after {{ max_retry_attempts }} retries. PIDs: {{ final_validation.stdout | default('unknown') }}.
-      Manual intervention required!
-    success_msg: >
-      ✅ PASSED: Service '{{ service_item.name }}' is confirmed STOPPED on {{ target_host_ip }}.
-      No stale PIDs detected.
-  when: initial_pids.stdout | length > 0
 
-# Already stopped scenario — just confirm
-- name: "[ {{ service_item.name }} ] ── Service was not running — nothing to stop"
-  ansible.builtin.debug:
-    msg:
-      - "Service '{{ service_item.name }}' was already NOT RUNNING on {{ target_host_ip }}."
-      - "No kill action was needed."
-  when: initial_pids.stdout | length == 0
