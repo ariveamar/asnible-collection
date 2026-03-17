@@ -15,7 +15,7 @@
       - "  Directory    : {{ script_item.script_dir }}"
       - "  Script File  : {{ script_item.script_file }}"
       - "  Arguments    : {{ script_item.args | default('(none)') }}"
-      - "  Full Path    : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "  Full Path    : {{ script_item.script_dir }}{{ script_item.script_file }}"
       - "└────────────────────────────────────────────────────────────────┘"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ script_item.label }} ] STEP 2 ─ Check script file exists"
   ansible.builtin.stat:
-    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+    path: "{{ script_item.script_dir }}{{ script_item.script_file }}"
   register: script_stat
 
 - name: "[ {{ script_item.label }} ] STEP 2 ─ Assert script file exists"
@@ -51,15 +51,15 @@
       - script_stat.stat.isreg
     fail_msg: >
       ❌ Script '{{ script_item.script_file }}' NOT found in '{{ script_item.script_dir }}' on {{ target_host_ip }}.
-      Full path checked: {{ script_item.script_dir }}/{{ script_item.script_file }}
-    success_msg: "✅ Script file confirmed: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      Full path checked: {{ script_item.script_dir }}{{ script_item.script_file }}
+    success_msg: "✅ Script file confirmed: {{ script_item.script_dir }}{{ script_item.script_file }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3 — Ensure script is executable
 # ─────────────────────────────────────────────────────────────────────────────
 - name: "[ {{ script_item.label }} ] STEP 3 ─ Ensure script is executable (chmod 0755)"
   ansible.builtin.file:
-    path: "{{ script_item.script_dir }}/{{ script_item.script_file }}"
+    path: "{{ script_item.script_dir }}{{ script_item.script_file }}"
     mode: "0755"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@
 # chdir ensures scripts using relative paths inside them work correctly.
 # async + poll allows real-time progress without blocking indefinitely.
 # ─────────────────────────────────────────────────────────────────────────────
-- name: "[ {{ script_item.label }} ] STEP 4 ─ Execute stop script: {{ script_item.script_dir }}/{{ script_item.script_file }}"
+- name: "[ {{ script_item.label }} ] STEP 4 ─ Execute stop script: {{ script_item.script_dir }}{{ script_item.script_file }}"
   ansible.builtin.shell:
     cmd: "./{{ script_item.script_file }} {{ script_item.args | default('') }}"
     chdir: "{{ script_item.script_dir }}"
@@ -88,7 +88,7 @@
     msg:
       - "┌─────────────────────────── STDOUT ────────────────────────────┐"
       - "  Service   : {{ script_item.label }}"
-      - "  Script    : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+      - "  Script    : {{ script_item.script_dir }}{{ script_item.script_file }}"
       - "  Target IP : {{ target_host_ip }}"
       - "  Exit Code : {{ script_result.rc }}"
       - "  Status    : {{ '✅ SUCCESS (rc=0)' if script_result.rc == 0 else '❌ FAILED (rc=' + script_result.rc | string + ')' }}"
@@ -117,11 +117,11 @@
     that:
       - script_result.rc == 0
     fail_msg: >
-      ❌ FAILED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      ❌ FAILED: Script '{{ script_item.script_dir }}{{ script_item.script_file }}'
       exited with code {{ script_result.rc }} on {{ target_host_ip }}.
       STDERR: {{ script_result.stderr | default('None') }}
     success_msg: >
-      ✅ PASSED: Script '{{ script_item.script_dir }}/{{ script_item.script_file }}'
+      ✅ PASSED: Script '{{ script_item.script_dir }}{{ script_item.script_file }}'
       completed successfully (rc=0) on {{ target_host_ip }}.
   when: not (ignore_script_errors | default(false))
 
@@ -154,7 +154,7 @@
     echo "=== Process Status for service: {{ script_item.label }} ==="
     echo "Timestamp  : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "Host IP    : {{ target_host_ip }}"
-    echo "Script     : {{ script_item.script_dir }}/{{ script_item.script_file }}"
+    echo "Script     : {{ script_item.script_dir }}{{ script_item.script_file }}"
     echo ""
     if [ -z "$PIDS" ]; then
       echo "STATUS     : ✅ STOPPED — No process found for '{{ script_item.label }}'"
