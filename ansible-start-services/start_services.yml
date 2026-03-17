@@ -73,7 +73,7 @@
  #       args:        ""
 
     # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
-    start_wait_seconds: 10       # Seconds to wait after each script before verifying
+    start_wait_seconds: 2       # Seconds to wait after each script before verifying
     script_timeout: 120          # Max seconds allowed for each script to finish
     ignore_script_errors: false  # true = continue loop even if a script fails
 
