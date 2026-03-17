@@ -152,7 +152,6 @@
     PIDS=$(echo "$PIDS" | tr -d '[:space:]')
 
     echo "=== Process Status for service: {{ script_item.label }} ==="
-    echo "Timestamp  : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "Host IP    : {{ target_host_ip }}"
     echo "Script     : {{ script_item.script_dir }}{{ script_item.script_file }}"
     echo ""
