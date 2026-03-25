@@ -47,16 +47,25 @@
     label: "{{ script_item.label }} (process: {{ script_item.process_name }})"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Print consolidated summary table of all results
+# FIX: Build the summary table as a single set_fact string first.
+# A {% for %} block CANNOT span multiple items in a debug.msg list because
+# each list item is templated independently — the for/endfor must live
+# inside one single string to be valid Jinja2.
 # ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | Build summary table string"
+  ansible.builtin.set_fact:
+    preflight_summary_table: |
+      {% for svc in stop_scripts %}
+        {{ '%-30s' | format(svc.label) }}  process: {{ '%-15s' | format(svc.process_name) }}  →  {{ '✅ RUNNING   — will STOP' if preflight_results[svc.label].is_running else '⏭️  NOT RUNNING — will SKIP' }}
+      {% endfor %}
+
 - name: "PRE-FLIGHT | Display consolidated results summary"
   ansible.builtin.debug:
     msg:
       - "╔══════════════════════════════════════════════════════════════════════════════╗"
       - "  PRE-FLIGHT RESULTS SUMMARY"
       - "  Host IP   : {{ target_host_ip }}"
-      - "  Timestamp : {{ ansible_date_time.iso8601 | default(lookup('pipe','date +%Y-%m-%dT%H:%M:%S')) }}"
+      - "  Timestamp : {{ lookup('pipe', 'date +\"%Y-%m-%d %H:%M:%S\"') }}"
       - "╠══════════════════════════════════════════════════════════════════════════════╣"
-      - "{% for svc in stop_scripts %}  {{ '%-30s' | format(svc.label) }} process: {{ '%-15s' | format(svc.process_name) }} → {{ '✅ RUNNING  — will STOP' if preflight_results[svc.label].is_running else '⏭️  NOT RUNNING — will SKIP' }}"
-      - "{% endfor %}"
+      - "{{ preflight_summary_table }}"
       - "╚══════════════════════════════════════════════════════════════════════════════╝"
