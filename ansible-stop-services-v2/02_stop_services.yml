@@ -29,7 +29,7 @@
 
   vars:
     # ── TARGET SERVER IP ──────────────────────────────────────────────────────
-    target_host_ip: "192.168.1.10"
+    target_host_ip: "192.168.80.33"
 
     # ── SERVICE LIST ──────────────────────────────────────────────────────────
     # Must match exactly what was defined in 01_preflight.yml
