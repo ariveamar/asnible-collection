@@ -1,0 +1,63 @@
+---
+# roles/stop_services/defaults/main.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# TARGET SERVER IP ADDRESS
+# This defines which server the stop scripts will be executed on.
+# Must match the ansible_host value in inventory/hosts.ini.
+# Override at runtime via: -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+target_host_ip: "192.168.1.10"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STOP SCRIPT LOCATIONS
+# Define each service stop script here.
+# The playbook loops through ALL entries and executes each script in order.
+#
+# Fields per entry:
+#   label        : Human-readable service name shown in task output and logs
+#   script_dir   : Full directory path on the target host where the script lives
+#   script_file  : Filename of the shell script to execute
+#   process_name : EXACT process name used to verify the PID after stop.
+#                  This is what appears in 'ps aux' output for this service.
+#                  Examples: "nginx", "java", "node", "python3", "myapp"
+#                  Run 'ps aux | grep <your_service>' on the target host
+#                  to confirm the correct value before setting this.
+#   args         : (Optional) Arguments to pass to the script. Use "" for none.
+# ─────────────────────────────────────────────────────────────────────────────
+stop_scripts:
+  - label:        "App Service A"
+    script_dir:   "/opt/services/app-a"
+    script_file:  "stop.sh"
+    process_name: "app-a"
+    args:         ""
+
+  - label:        "App Service B"
+    script_dir:   "/opt/services/app-b"
+    script_file:  "stop.sh"
+    process_name: "app-b"
+    args:         ""
+
+  - label:        "Worker Service"
+    script_dir:   "/home/deploy/worker"
+    script_file:  "stop-worker.sh"
+    process_name: "worker"
+    args:         "--graceful"
+
+  - label:        "API Gateway"
+    script_dir:   "/srv/gateway"
+    script_file:  "stop.sh"
+    process_name: "gateway"
+    args:         ""
+
+  - label:        "Background Scheduler"
+    script_dir:   "/opt/scheduler"
+    script_file:  "shutdown.sh"
+    process_name: "scheduler"
+    args:         ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION SETTINGS
+# ─────────────────────────────────────────────────────────────────────────────
+stop_wait_seconds: 5         # Seconds to pause after each script runs
+script_timeout: 120          # Max seconds allowed for each script to complete
+ignore_script_errors: false  # Set true to continue loop even if a script fails (rc != 0)

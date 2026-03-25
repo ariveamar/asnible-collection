@@ -1,0 +1,85 @@
+---
+# 01_preflight.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 1 — PRE-FLIGHT PROCESS STATUS CHECK
+#
+# Checks whether each service in stop_scripts is currently running.
+# Stores results in the `preflight_results` host fact so that
+# 02_stop_services.yml can read them and decide what to stop vs skip.
+#
+# Run this FIRST, then run 02_stop_services.yml.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini 01_preflight.yml
+#   ansible-playbook -i inventory/hosts.ini 01_preflight.yml -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE 1 — PRE-FLIGHT: Check process status for all services"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    # ── TARGET SERVER IP ──────────────────────────────────────────────────────
+    target_host_ip: "192.168.1.10"
+
+    # ── SERVICE LIST ──────────────────────────────────────────────────────────
+    # process_name: exact name as it appears in 'ps aux' on the target host
+    # ─────────────────────────────────────────────────────────────────────────
+    stop_scripts:
+      - label:        "App Service A"
+        script_dir:   "/opt/services/app-a"
+        script_file:  "stop.sh"
+        process_name: "app-a"
+        args:         ""
+
+      - label:        "App Service B"
+        script_dir:   "/opt/services/app-b"
+        script_file:  "stop.sh"
+        process_name: "app-b"
+        args:         ""
+
+      - label:        "Worker Service"
+        script_dir:   "/home/deploy/worker"
+        script_file:  "stop-worker.sh"
+        process_name: "worker"
+        args:         "--graceful"
+
+      - label:        "API Gateway"
+        script_dir:   "/srv/gateway"
+        script_file:  "stop.sh"
+        process_name: "gateway"
+        args:         ""
+
+      - label:        "Background Scheduler"
+        script_dir:   "/opt/scheduler"
+        script_file:  "shutdown.sh"
+        process_name: "scheduler"
+        args:         ""
+
+  tasks:
+    - name: "Run pre-flight check phase"
+      ansible.builtin.include_role:
+        name: stop_services
+        tasks_from: preflight.yml
+
+    - name: "PRE-FLIGHT COMPLETE — Results stored in preflight_results"
+      ansible.builtin.debug:
+        msg:
+          - "Pre-flight phase complete. Results are stored in preflight_results."
+          - "Now run: ansible-playbook -i inventory/hosts.ini 02_stop_services.yml"
+          - ""
+          - "Services that will be STOPPED :"
+          - "{{ stop_scripts | selectattr('label', 'in', preflight_results.keys())
+                             | selectattr('label', 'in',
+                                 preflight_results | dict2items
+                                 | selectattr('value.is_running')
+                                 | map(attribute='key') | list)
+                             | map(attribute='label') | list }}"
+          - "Services that will be SKIPPED :"
+          - "{{ stop_scripts | selectattr('label', 'in', preflight_results.keys())
+                             | rejectattr('label', 'in',
+                                 preflight_results | dict2items
+                                 | selectattr('value.is_running')
+                                 | map(attribute='key') | list)
+                             | map(attribute='label') | list }}"

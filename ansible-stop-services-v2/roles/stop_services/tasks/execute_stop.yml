@@ -1,0 +1,65 @@
+---
+# roles/stop_services/tasks/execute_stop.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION PHASE — Run independently via 02_stop_services.yml playbook.
+# Reads preflight_results fact (set by preflight phase) and loops through
+# all services. Services marked is_running=true are stopped. Others are skipped.
+#
+# If preflight_results is not available (pre-flight was never run), the
+# playbook falls back to running an inline pre-flight check automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "EXECUTE | Display execution plan"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════════╗"
+      - "  PHASE         : STOP SERVICE EXECUTION                           "
+      - "  TARGET IP     : {{ target_host_ip }}                             "
+      - "  TOTAL SERVICES: {{ stop_scripts | length }}                      "
+      - "  SERVICES      : {{ stop_scripts | map(attribute='label') | list | join(', ') }}"
+      - "╚══════════════════════════════════════════════════════════════════╝"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Safety fallback: if preflight_results was never populated (i.e. the
+# pre-flight playbook was skipped), run a quick inline check per service
+# so the execution phase always has the data it needs.
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "EXECUTE | Check if preflight_results is available"
+  ansible.builtin.set_fact:
+    preflight_available: "{{ preflight_results is defined and preflight_results | length > 0 }}"
+
+- name: "EXECUTE | ⚠️  preflight_results not found — running inline pre-flight check"
+  ansible.builtin.debug:
+    msg:
+      - "preflight_results was not found in hostvars."
+      - "This means 01_preflight.yml was not run before this playbook."
+      - "Running an inline pre-flight check now before proceeding..."
+  when: not preflight_available
+
+- name: "EXECUTE | Run inline pre-flight (fallback) when results not available"
+  ansible.builtin.include_tasks: preflight.yml
+  when: not preflight_available
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Print summary of what will run vs what will be skipped
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "EXECUTE | Display stop/skip decision for each service"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════════════════════╗"
+      - "  EXECUTION DECISION SUMMARY"
+      - "  Host IP   : {{ target_host_ip }}"
+      - "╠══════════════════════════════════════════════════════════════════════════════╣"
+      - "{% for svc in stop_scripts %}  {{ '%-30s' | format(svc.label) }} → {{ '🛑 WILL STOP  (PID: ' + preflight_results[svc.label].pids + ')' if preflight_results[svc.label].is_running else '⏭️  WILL SKIP  (not running)' }}"
+      - "{% endfor %}"
+      - "╚══════════════════════════════════════════════════════════════════════════════╝"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Loop through each service and execute the stop task
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "EXECUTE | Process each service (loop)"
+  ansible.builtin.include_tasks: execute_stop_single.yml
+  loop: "{{ stop_scripts }}"
+  loop_control:
+    loop_var: script_item
+    label: "{{ script_item.label }} → {{ 'STOP' if preflight_results[script_item.label].is_running else 'SKIP' }}"

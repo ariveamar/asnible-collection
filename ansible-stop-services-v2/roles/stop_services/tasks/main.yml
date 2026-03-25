@@ -1,0 +1,13 @@
+---
+# roles/stop_services/tasks/main.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Default entry point when the role is called directly.
+# Runs the full sequence: pre-flight check → execution.
+# Use the standalone playbooks if you need to run phases separately.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "MAIN | Run pre-flight check phase"
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: "MAIN | Run stop execution phase"
+  ansible.builtin.include_tasks: execute_stop.yml

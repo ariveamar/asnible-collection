@@ -1,0 +1,58 @@
+---
+# stop_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# COMBINED playbook — runs pre-flight + execution in a single command.
+# Use this when you want everything in one shot.
+# Use 01_preflight.yml + 02_stop_services.yml when you need to review
+# pre-flight results before committing to stop.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini stop_services.yml
+#   ansible-playbook -i inventory/hosts.ini stop_services.yml -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "STOP SERVICES — Full sequence (pre-flight + execution)"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    target_host_ip: "192.168.1.10"
+
+    stop_scripts:
+      - label:        "App Service A"
+        script_dir:   "/opt/services/app-a"
+        script_file:  "stop.sh"
+        process_name: "app-a"
+        args:         ""
+
+      - label:        "App Service B"
+        script_dir:   "/opt/services/app-b"
+        script_file:  "stop.sh"
+        process_name: "app-b"
+        args:         ""
+
+      - label:        "Worker Service"
+        script_dir:   "/home/deploy/worker"
+        script_file:  "stop-worker.sh"
+        process_name: "worker"
+        args:         "--graceful"
+
+      - label:        "API Gateway"
+        script_dir:   "/srv/gateway"
+        script_file:  "stop.sh"
+        process_name: "gateway"
+        args:         ""
+
+      - label:        "Background Scheduler"
+        script_dir:   "/opt/scheduler"
+        script_file:  "shutdown.sh"
+        process_name: "scheduler"
+        args:         ""
+
+    stop_wait_seconds: 5
+    script_timeout: 120
+    ignore_script_errors: false
+
+  roles:
+    - stop_services

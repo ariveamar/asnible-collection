@@ -1,0 +1,77 @@
+---
+# 02_stop_services.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 2 — STOP SERVICE EXECUTION
+#
+# Reads preflight_results fact (populated by 01_preflight.yml) to decide
+# which services to stop vs skip. Services with is_running=true are stopped
+# via their defined shell script. Others are skipped cleanly.
+#
+# If preflight_results is not available (01_preflight.yml was not run first),
+# this playbook will automatically run an inline pre-flight check before
+# proceeding so it is always safe to run standalone.
+#
+# Recommended usage (run in order):
+#   ansible-playbook -i inventory/hosts.ini 01_preflight.yml
+#   ansible-playbook -i inventory/hosts.ini 02_stop_services.yml
+#
+# Standalone usage (auto-runs preflight internally):
+#   ansible-playbook -i inventory/hosts.ini 02_stop_services.yml
+#
+# Override target IP:
+#   ansible-playbook -i inventory/hosts.ini 02_stop_services.yml -e "target_host_ip=10.0.0.50"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE 2 — EXECUTION: Stop services via shell scripts"
+  hosts: "{{ target_host_ip | default('app_servers') }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    # ── TARGET SERVER IP ──────────────────────────────────────────────────────
+    target_host_ip: "192.168.1.10"
+
+    # ── SERVICE LIST ──────────────────────────────────────────────────────────
+    # Must match exactly what was defined in 01_preflight.yml
+    # ─────────────────────────────────────────────────────────────────────────
+    stop_scripts:
+      - label:        "App Service A"
+        script_dir:   "/opt/services/app-a"
+        script_file:  "stop.sh"
+        process_name: "app-a"
+        args:         ""
+
+      - label:        "App Service B"
+        script_dir:   "/opt/services/app-b"
+        script_file:  "stop.sh"
+        process_name: "app-b"
+        args:         ""
+
+      - label:        "Worker Service"
+        script_dir:   "/home/deploy/worker"
+        script_file:  "stop-worker.sh"
+        process_name: "worker"
+        args:         "--graceful"
+
+      - label:        "API Gateway"
+        script_dir:   "/srv/gateway"
+        script_file:  "stop.sh"
+        process_name: "gateway"
+        args:         ""
+
+      - label:        "Background Scheduler"
+        script_dir:   "/opt/scheduler"
+        script_file:  "shutdown.sh"
+        process_name: "scheduler"
+        args:         ""
+
+    # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
+    stop_wait_seconds: 5         # Pause after each stop script before verifying
+    script_timeout: 120          # Max seconds per script before timeout
+    ignore_script_errors: false  # true = continue loop even if a script fails
+
+  tasks:
+    - name: "Run stop execution phase"
+      ansible.builtin.include_role:
+        name: stop_services
+        tasks_from: execute_stop.yml

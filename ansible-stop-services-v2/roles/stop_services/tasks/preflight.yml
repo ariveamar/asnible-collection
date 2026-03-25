@@ -1,0 +1,62 @@
+---
+# roles/stop_services/tasks/preflight.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# PRE-FLIGHT CHECK — Run independently via 01_preflight.yml playbook.
+# Loops through all services in stop_scripts, checks each process status,
+# and builds a host_fact dictionary (preflight_results) that the execution
+# playbook reads to decide which services to stop.
+#
+# Output fact structure:
+#   preflight_results:
+#     "App Service A":
+#       label:        "App Service A"
+#       process_name: "app-a"
+#       script_dir:   "/opt/services/app-a"
+#       script_file:  "stop.sh"
+#       args:         ""
+#       is_running:   true | false
+#       pids:         "1234 5678" | ""
+#       checked_at:   "2025-06-01 10:00:00"
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: "PRE-FLIGHT | Display check plan"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════════╗"
+      - "  PHASE         : PRE-FLIGHT PROCESS STATUS CHECK                  "
+      - "  TARGET IP     : {{ target_host_ip }}                             "
+      - "  TOTAL SERVICES: {{ stop_scripts | length }}                      "
+      - "  SERVICES      : {{ stop_scripts | map(attribute='label') | list | join(', ') }}"
+      - "╚══════════════════════════════════════════════════════════════════╝"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Initialise the result dictionary as an empty dict before the loop begins
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | Initialise preflight_results dictionary"
+  ansible.builtin.set_fact:
+    preflight_results: {}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Loop through every service and check its process status
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | Check process status for each service (loop)"
+  ansible.builtin.include_tasks: preflight_check_single.yml
+  loop: "{{ stop_scripts }}"
+  loop_control:
+    loop_var: script_item
+    label: "{{ script_item.label }} (process: {{ script_item.process_name }})"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Print consolidated summary table of all results
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | Display consolidated results summary"
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════════════════════════╗"
+      - "  PRE-FLIGHT RESULTS SUMMARY"
+      - "  Host IP   : {{ target_host_ip }}"
+      - "  Timestamp : {{ ansible_date_time.iso8601 | default(lookup('pipe','date +%Y-%m-%dT%H:%M:%S')) }}"
+      - "╠══════════════════════════════════════════════════════════════════════════════╣"
+      - "{% for svc in stop_scripts %}  {{ '%-30s' | format(svc.label) }} process: {{ '%-15s' | format(svc.process_name) }} → {{ '✅ RUNNING  — will STOP' if preflight_results[svc.label].is_running else '⏭️  NOT RUNNING — will SKIP' }}"
+      - "{% endfor %}"
+      - "╚══════════════════════════════════════════════════════════════════════════════╝"
