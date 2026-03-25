@@ -1,0 +1,112 @@
+---
+# roles/stop_services/tasks/preflight_check_single.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Checks process status for ONE service in the loop.
+# Called by preflight.yml via include_tasks.
+# Appends the result to the preflight_results dictionary.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validate process_name is set before attempting any remote check
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | [ {{ script_item.label }} ] Validate process_name is defined"
+  ansible.builtin.assert:
+    that:
+      - script_item.process_name is defined
+      - script_item.process_name | trim | length > 0
+    fail_msg: >
+      ❌ 'process_name' is missing or empty for service '{{ script_item.label }}'.
+      Set process_name to the exact name visible in 'ps aux' output.
+      Example: process_name: "nginx"
+    success_msg: "✅ process_name is set: '{{ script_item.process_name }}'"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Run ps aux check on the target host
+# exit 0 → process running
+# exit 2 → process not running (not an error)
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | [ {{ script_item.label }} ] Query process '{{ script_item.process_name }}' on {{ target_host_ip }}"
+  ansible.builtin.shell: |
+    set -o pipefail
+
+    # Full process rows matching the process name
+    PROCESS_ROWS=$(ps aux \
+      | grep -w "{{ script_item.process_name }}" \
+      | grep -v grep \
+      | grep -v ansible \
+      | grep -v sshd \
+      | grep -v python \
+      || true)
+
+    # PIDs only — strip all whitespace for clean boolean check
+    PIDS=$(echo "$PROCESS_ROWS" | awk 'NF{print $2}' | tr -d '[:space:]')
+
+    echo "┌─────────────────────────────────────────────────────────────────┐"
+    echo "  PRE-FLIGHT CHECK RESULT"
+    echo "  Timestamp    : $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "  Host IP      : {{ target_host_ip }}"
+    echo "  Service      : {{ script_item.label }}"
+    echo "  Process Name : {{ script_item.process_name }}"
+    echo "├─────────────────────────────────────────────────────────────────┤"
+
+    if [ -n "$PIDS" ]; then
+      echo "  STATUS       : ✅ RUNNING"
+      echo "  PID(s)       : $PIDS"
+      echo "  ACTION       : Will be stopped in execution phase"
+      echo "├─────────────────────────────────────────────────────────────────┤"
+      echo "  PROCESS DETAILS:"
+      echo "  USER         PID  %CPU %MEM    VSZ    RSS TTY    STAT START   TIME COMMAND"
+      echo "$PROCESS_ROWS" | while IFS= read -r line; do
+        echo "  $line"
+      done
+      echo "└─────────────────────────────────────────────────────────────────┘"
+      echo "__PIDS__:$PIDS"
+      echo "__IS_RUNNING__:true"
+      exit 0
+    else
+      echo "  STATUS       : ⏭️  NOT RUNNING"
+      echo "  PID(s)       : None"
+      echo "  ACTION       : Will be SKIPPED in execution phase"
+      echo "└─────────────────────────────────────────────────────────────────┘"
+      echo "__PIDS__:"
+      echo "__IS_RUNNING__:false"
+      exit 2
+    fi
+  args:
+    executable: /bin/bash
+  register: single_check
+  changed_when: false
+  failed_when: single_check.rc not in [0, 2]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Display the raw output from the check
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | [ {{ script_item.label }} ] Display check output"
+  ansible.builtin.debug:
+    msg: "{{ single_check.stdout_lines }}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parse the structured values embedded in stdout (__PIDS__ / __IS_RUNNING__)
+# and append this service's result into the preflight_results dictionary
+# ─────────────────────────────────────────────────────────────────────────────
+- name: "PRE-FLIGHT | [ {{ script_item.label }} ] Register result into preflight_results"
+  ansible.builtin.set_fact:
+    preflight_results: >-
+      {{
+        preflight_results | combine({
+          script_item.label: {
+            'label':        script_item.label,
+            'process_name': script_item.process_name,
+            'script_dir':   script_item.script_dir,
+            'script_file':  script_item.script_file,
+            'args':         script_item.args | default(''),
+            'is_running':   (single_check.rc == 0),
+            'pids':         (single_check.stdout_lines
+                              | select('match', '^__PIDS__:')
+                              | list | first
+                              | default('__PIDS__:')
+                              | replace('__PIDS__:', '') | trim),
+            'checked_at':   lookup('pipe', 'date "+%Y-%m-%d %H:%M:%S"')
+          }
+        })
+      }}
