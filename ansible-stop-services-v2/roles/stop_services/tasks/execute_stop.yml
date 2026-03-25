@@ -41,8 +41,18 @@
   when: not preflight_available
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Print summary of what will run vs what will be skipped
+# FIX: Build the decision summary as a single set_fact string first.
+# A {% for %} block CANNOT span multiple items in a debug.msg list because
+# each list item is templated independently — the for/endfor must live
+# inside one single string to be valid Jinja2.
 # ─────────────────────────────────────────────────────────────────────────────
+- name: "EXECUTE | Build stop/skip decision summary string"
+  ansible.builtin.set_fact:
+    execution_summary_table: |
+      {% for svc in stop_scripts %}
+        {{ '%-30s' | format(svc.label) }}  →  {{ '🛑 WILL STOP  (PID: ' + preflight_results[svc.label].pids + ')' if preflight_results[svc.label].is_running else '⏭️  WILL SKIP  (not running)' }}
+      {% endfor %}
+
 - name: "EXECUTE | Display stop/skip decision for each service"
   ansible.builtin.debug:
     msg:
@@ -50,8 +60,7 @@
       - "  EXECUTION DECISION SUMMARY"
       - "  Host IP   : {{ target_host_ip }}"
       - "╠══════════════════════════════════════════════════════════════════════════════╣"
-      - "{% for svc in stop_scripts %}  {{ '%-30s' | format(svc.label) }} → {{ '🛑 WILL STOP  (PID: ' + preflight_results[svc.label].pids + ')' if preflight_results[svc.label].is_running else '⏭️  WILL SKIP  (not running)' }}"
-      - "{% endfor %}"
+      - "{{ execution_summary_table }}"
       - "╚══════════════════════════════════════════════════════════════════════════════╝"
 
 # ─────────────────────────────────────────────────────────────────────────────
