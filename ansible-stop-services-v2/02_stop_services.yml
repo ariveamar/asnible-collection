@@ -35,35 +35,13 @@
     # Must match exactly what was defined in 01_preflight.yml
     # ─────────────────────────────────────────────────────────────────────────
     stop_scripts:
-      - label:        "App Service A"
-        script_dir:   "/opt/services/app-a"
-        script_file:  "stop.sh"
-        process_name: "app-a"
+      - label:        "node_exporter"
+        script_dir:   "/home/"
+        script_file:  "stop-service.sh"
+        process_name: "node_exporter"
         args:         ""
 
-      - label:        "App Service B"
-        script_dir:   "/opt/services/app-b"
-        script_file:  "stop.sh"
-        process_name: "app-b"
-        args:         ""
 
-      - label:        "Worker Service"
-        script_dir:   "/home/deploy/worker"
-        script_file:  "stop-worker.sh"
-        process_name: "worker"
-        args:         "--graceful"
-
-      - label:        "API Gateway"
-        script_dir:   "/srv/gateway"
-        script_file:  "stop.sh"
-        process_name: "gateway"
-        args:         ""
-
-      - label:        "Background Scheduler"
-        script_dir:   "/opt/scheduler"
-        script_file:  "shutdown.sh"
-        process_name: "scheduler"
-        args:         ""
 
     # ── EXECUTION SETTINGS ────────────────────────────────────────────────────
     stop_wait_seconds: 5         # Pause after each stop script before verifying
