@@ -15,8 +15,8 @@ jira_user: "arief@ivteknologi.com"
 jira_api_token: "ATATT3xFfGF0_DnHuNq5gB-FtRWYsl1wdA02NpCi1q9qbUlBObgMZWrBipnyT4UlmNyK5OC7FridOPYDprao5lElgx6yNt_XN6qcUcgXIxihoPdPV2lLw3P7j7iCpclNCWwwLpVVJtObcRFn2Uz4jbBop6yW8cFQW22Q0bpOspmJ-m0ZhV-JjD8=75F2EAA8"
 
 # --- Jira Project & Ticket Config ---
-jira_project_key: "SD"
-jira_issue_type: "Service Request"
+jira_project_key: "SUP"
+jira_issue_type: "Request a change"
 jira_summary: "Access Request - Production DB"
 jira_description: |
   This is an automated access request created via Ansible.
@@ -39,7 +39,7 @@ jira_approver_account_id: "712020"
 # --- Mattermost ---
 mattermost_icon_emoji: ":robot_face:"
 mattermost_url: https://mm-ivt.ddns.my.id
-mattermost_apikey: "kkhs7gmni3nmd85a38aor69czo"
+mattermost_api_key: "kkhs7gmni3nmd85a38aor69czo"
 
 
 # --- Polling / Timeout ---
