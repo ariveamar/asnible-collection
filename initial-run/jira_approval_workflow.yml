@@ -29,7 +29,7 @@
   # Variables — override these via -e flags or a vars_file / vault
   # ---------------------------------------------------------------------------
   vars_files:
-    - "./vars.yaml"
+    - "./vars_main.yml"
 
 
   # ---------------------------------------------------------------------------
@@ -161,17 +161,10 @@
     # TASK 3: Send Mattermost Notification — Ticket Created
     # -------------------------------------------------------------------------
     - name: "TASK 3 | Send Mattermost notification — ticket created"
-      ansible.builtin.uri:
-        url: "{{ mattermost_webhook_url }}"
-        method: POST
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-        body:
-          channel: "{{ mattermost_channel }}"
-          username: "{{ mattermost_username }}"
-          icon_emoji: "{{ mattermost_icon_emoji }}"
-          text: |
+      community.general.mattermost:
+        url: "{{ mattermost_url }}"
+        api_key: "{{ mattermost_apikey }}"
+        text:  |
             ## 🎫 New Jira Approval Ticket Created
             | Field       | Value |
             |-------------|-------|
@@ -181,8 +174,11 @@
             | **Status**  | 🟡 Awaiting Approval |
 
             > An approver has been notified. Waiting for approval...
-        status_code: [200, 201]
-        validate_certs: true
+        channel: "off-topic"
+        priority: important
+        validate_certs: false
+        username: system-bot
+      delegate_to: localhost
       register: mm_notify_created
 
     - name: "TASK 3 | Confirm Mattermost notification sent"
@@ -229,17 +225,10 @@
     # TASK 5: Send Mattermost Notification — Ticket Approved
     # -------------------------------------------------------------------------
     - name: "TASK 5 | Send Mattermost notification — ticket approved"
-      ansible.builtin.uri:
-        url: "{{ mattermost_webhook_url }}"
-        method: POST
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-        body:
-          channel: "{{ mattermost_channel }}"
-          username: "{{ mattermost_username }}"
-          icon_emoji: ":white_check_mark:"
-          text: |
+      community.general.mattermost:
+        url: "{{ mattermost_url }}"
+        api_key: "{{ mattermost_apikey }}"
+        text: |
             ## ✅ Jira Ticket Approved!
             | Field       | Value |
             |-------------|-------|
@@ -249,8 +238,11 @@
             | **Status**  | 🟢 **APPROVED** |
 
             > The request has been approved. Proceeding with automated workflow.
-        status_code: [200, 201]
-        validate_certs: true
+        channel: "off-topic"
+        priority: important
+        validate_certs: false
+        username: system-bot
+      delegate_to: localhost
 
     - name: "TASK 5 | Confirm approval notification sent"
       ansible.builtin.debug:
