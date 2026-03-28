@@ -12,7 +12,7 @@
 # --- Jira Connection ---
 jira_url: "https://ivteknologi-infra.atlassian.net/"
 jira_user: "arief@ivteknologi.com"
-jira_api_token: "ATATT3xFfGF0fqYz8zw3gEehRL4Hk16Uu01GmGKC28s3WuiXJAmoHhQKmrVNDMJgCo49c1vpgGlkpb9Pdhcq6QtfVirm7AxbpI29Htp69icLlorGAZ9muv4nGP6E71cZnm4qNdpOXVT2H3aGav1N4umWX3myGDwY7VgMV5uizSkeS7y4f91HMd0=912F1912"
+jira_api_token: "BAKEKOK"
 # --- Jira Project & Ticket Config ---
 jira_project_key: "SUP"
 jira_issue_type: "Request a change"
@@ -38,7 +38,7 @@ jira_approver_account_id: "712020"
 # --- Mattermost ---
 mattermost_icon_emoji: ":robot_face:"
 mattermost_url: https://mm-ivt.ddns.my.id
-mattermost_api_key: "kkhs7gmni3nmd85a38aor69czo"
+mattermost_api_key: "BAKEKOK"
 
 
 # --- Polling / Timeout ---
