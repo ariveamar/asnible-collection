@@ -37,12 +37,13 @@ jira_request_type_id: "10003"
 jira_approver_account_id: "712020"
 
 # --- Mattermost ---
-mattermost_webhook_url: "https://mm-ivt.ddns.my.id/hooks/kkhs7gmni3nmd85a38aor69czo"   # ⚠️  Encrypt with ansible-vault
-mattermost_channel: "off-topic"
-mattermost_username: "system-bot"
 mattermost_icon_emoji: ":robot_face:"
+mattermost_url: https://mm-ivt.ddns.my.id
+mattermost_apikey: "kkhs7gmni3nmd85a38aor69czo"
+
 
 # --- Polling / Timeout ---
 approval_poll_interval_seconds: 30    # Check every 30 seconds
 approval_poll_max_retries: 40         # Give up after 40 retries = 20 minutes total
 jira_approved_status: "Approved"      # Must match the exact Jira status name
+
