@@ -28,37 +28,9 @@
   # ---------------------------------------------------------------------------
   # Variables — override these via -e flags or a vars_file / vault
   # ---------------------------------------------------------------------------
-  vars:
-    # --- Jira Connection ---
-    jira_url: "https://your-org.atlassian.net"
-    jira_user: "your@email.com"
-    jira_api_token: "YOUR_JIRA_API_TOKEN"           # Use ansible-vault in production
+  vars_files:
+    - "./vars.yaml"
 
-    # --- Jira Project & Issue Config ---
-    jira_project_key: "SD"                           # Service Desk project key
-    jira_issue_type: "Service Request"               # Request type / issue type
-    jira_summary: "Access Request - Production DB"
-    jira_description: |
-      This is an automated access request created via Ansible.
-      Please review and approve or deny this request.
-    jira_priority: "Medium"                          # Low | Medium | High | Critical
-    jira_request_type_id: "10010"                    # Service Desk request type ID
-                                                     # Get from: GET /rest/servicedeskapi/servicedesk/{id}/requesttype
-
-    # --- Approval Config ---
-    jira_approver_account_id: "APPROVER_ACCOUNT_ID" # Jira accountId of the approver
-                                                     # Get from: GET /rest/api/3/user/search?query=name
-
-    # --- Mattermost Config ---
-    mattermost_webhook_url: "https://mattermost.example.com/hooks/YOUR_WEBHOOK_ID"
-    mattermost_channel: "devops-approvals"           # Optional: override webhook default channel
-    mattermost_username: "AnsibleBot"
-    mattermost_icon_emoji: ":robot_face:"
-
-    # --- Polling Config ---
-    approval_poll_interval_seconds: 30              # How often to check ticket status
-    approval_poll_max_retries: 40                   # Max attempts (40 x 30s = 20 minutes)
-    jira_approved_status: "Approved"                # Exact Jira status name when approved
 
   # ---------------------------------------------------------------------------
   # Tasks
