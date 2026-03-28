@@ -1,0 +1,48 @@
+# =============================================================================
+# vars/main.yml — Variable definitions for jira_approval_workflow.yml
+# =============================================================================
+# Usage:
+#   ansible-playbook jira_approval_workflow.yml -e @vars/main.yml
+#
+# For secrets, encrypt this file with Ansible Vault:
+#   ansible-vault encrypt vars/main.yml
+#   ansible-playbook jira_approval_workflow.yml -e @vars/main.yml --ask-vault-pass
+# =============================================================================
+
+# --- Jira Connection ---
+jira_url: "https://your-org.atlassian.net"
+jira_user: "your@email.com"
+jira_api_token: "YOUR_JIRA_API_TOKEN"        # ⚠️  Encrypt with ansible-vault
+
+# --- Jira Project & Ticket Config ---
+jira_project_key: "SD"
+jira_issue_type: "Service Request"
+jira_summary: "Access Request - Production DB"
+jira_description: |
+  This is an automated access request created via Ansible.
+  Environment  : Production
+  Requested by : Ansible Automation
+  Please review and approve or deny this request.
+jira_priority: "Medium"
+
+# --- Service Desk Request Type ---
+# To find your serviceDeskId and requestTypeId:
+#   curl -u user:token https://your-org.atlassian.net/rest/servicedeskapi/servicedesk
+#   curl -u user:token https://your-org.atlassian.net/rest/servicedeskapi/servicedesk/{id}/requesttype
+jira_request_type_id: "10010"
+
+# --- Approver ---
+# To find accountId:
+#   curl -u user:token "https://your-org.atlassian.net/rest/api/3/user/search?query=firstname.lastname"
+jira_approver_account_id: "APPROVER_ACCOUNT_ID"
+
+# --- Mattermost ---
+mattermost_webhook_url: "https://mattermost.example.com/hooks/YOUR_WEBHOOK_ID"   # ⚠️  Encrypt with ansible-vault
+mattermost_channel: "devops-approvals"
+mattermost_username: "AnsibleBot"
+mattermost_icon_emoji: ":robot_face:"
+
+# --- Polling / Timeout ---
+approval_poll_interval_seconds: 30    # Check every 30 seconds
+approval_poll_max_retries: 40         # Give up after 40 retries = 20 minutes total
+jira_approved_status: "Approved"      # Must match the exact Jira status name
