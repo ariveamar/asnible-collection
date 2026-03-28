@@ -12,7 +12,7 @@
 # --- Jira Connection ---
 jira_url: "https://ivteknologi-infra.atlassian.net/"
 jira_user: "arief@ivteknologi.com"
-jira_api_token: "ATATT3xFfGF0622OgbfOiCq5F4lsyO6vX2KfLH_wJxreH5PbSWeNNaos2SPbzHtrkOF8TLBywHUqEyYSmz2UshJKkhcV-NDxpGRSl97WEUOo8ojBP6PrFBHikk6isf-0pMhy4r7k4Ntmaa2mIkN1FaCj6_u1KyLFdXgpN11D3Ng9b7Ma2axTbCA=8B80F536"        # ⚠️  Encrypt with ansible-vault
+jira_api_token: "ATATT3xFfGF0_DnHuNq5gB-FtRWYsl1wdA02NpCi1q9qbUlBObgMZWrBipnyT4UlmNyK5OC7FridOPYDprao5lElgx6yNt_XN6qcUcgXIxihoPdPV2lLw3P7j7iCpclNCWwwLpVVJtObcRFn2Uz4jbBop6yW8cFQW22Q0bpOspmJ-m0ZhV-JjD8=75F2EAA8"
 
 # --- Jira Project & Ticket Config ---
 jira_project_key: "SD"
