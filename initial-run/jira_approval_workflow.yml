@@ -29,7 +29,6 @@
         issuetype: "{{ jira_issue_type }}"
         summary: "{{ jira_summary }}"
         description: "{{ jira_description }}"
-        priority: "{{ jira_priority }}"
         operation: create
       register: jira_create_result
 
