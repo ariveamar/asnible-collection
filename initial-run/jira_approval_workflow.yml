@@ -1,32 +1,10 @@
 ---
-# =============================================================================
-# Ansible Playbook: Jira Approval Workflow with Mattermost Notifications
-# =============================================================================
-# Description:
-#   1. Creates a Jira ticket with a specific request type (Service Desk)
-#   2. Assigns approval to a specific user
-#   3. Sends Mattermost notification with ticket details after creation
-#   4. Polls Jira until the ticket status is "Approved"
-#   5. Sends Mattermost notification when ticket is approved
-#
-# Requirements:
-#   - Ansible 2.9+
-#   - community.general collection: ansible-galaxy collection install community.general
-#
-# Usage:
-#   ansible-playbook jira_approval_workflow.yml \
-#     -e "jira_url=https://your-org.atlassian.net" \
-#     -e "jira_user=your@email.com" \
-#     -e "jira_api_token=YOUR_TOKEN" \
-#     -e "mattermost_webhook_url=https://mattermost.example.com/hooks/XXXX"
-# =============================================================================
-
 - name: Jira Approval Workflow with Mattermost Notifications
   hosts: localhost
   gather_facts: false
 
   # ---------------------------------------------------------------------------
-  # Variables — override these via -e flags or a vars_file / vault
+  # Variables — override via -e flags, vars_file, or ansible-vault
   # ---------------------------------------------------------------------------
   vars_files:
     - "./vars_main.yml"
@@ -38,34 +16,28 @@
   tasks:
 
     # -------------------------------------------------------------------------
-    # TASK 1: Create Jira Service Desk Ticket
+    # TASK 1: Create Jira Ticket
+    # Module : community.general.jira (operation: create)
+    # Docs   : https://docs.ansible.com/ansible/latest/collections/community/general/jira_module.html
     # -------------------------------------------------------------------------
-    - name: "TASK 1 | Create Jira Service Desk ticket"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/servicedeskapi/request"
-        method: POST
-        user: "{{ jira_user }}"
+    - name: "TASK 1 | Create Jira ticket"
+      community.general.jira:
+        uri: "{{ jira_url }}"
+        username: "{{ jira_user }}"
         password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-          X-Atlassian-Token: "no-check"
-        body:
-          serviceDeskId: "{{ jira_request_type_id }}"
-          requestTypeId: "{{ jira_request_type_id }}"
-          requestFieldValues:
-            summary: "{{ jira_summary }}"
-            description: "{{ jira_description }}"
-        status_code: [200, 201]
-        validate_certs: true
+        project: "{{ jira_project_key }}"
+        issuetype: "{{ jira_issue_type }}"
+        summary: "{{ jira_summary }}"
+        description: "{{ jira_description }}"
+        priority: "{{ jira_priority }}"
+        operation: create
       register: jira_create_result
 
-    - name: "TASK 1 | Extract ticket details"
+    - name: "TASK 1 | Extract ticket key, ID, and URL from result"
       ansible.builtin.set_fact:
-        jira_issue_key: "{{ jira_create_result.json.issueKey }}"
-        jira_issue_id: "{{ jira_create_result.json.issueId }}"
-        jira_issue_url: "{{ jira_url }}/browse/{{ jira_create_result.json.issueKey }}"
+        jira_issue_key: "{{ jira_create_result.meta.key }}"
+        jira_issue_id: "{{ jira_create_result.meta.id }}"
+        jira_issue_url: "{{ jira_url }}/browse/{{ jira_create_result.meta.key }}"
 
     - name: "TASK 1 | Display created ticket info"
       ansible.builtin.debug:
@@ -76,145 +48,89 @@
           - "   URL        : {{ jira_issue_url }}"
 
     # -------------------------------------------------------------------------
-    # TASK 2: Assign Approver to the Jira Ticket
+    # TASK 2: Assign Approver & Add Approval Comment
+    # Module : community.general.jira (operations: edit + comment)
     # -------------------------------------------------------------------------
-    - name: "TASK 2 | Fetch approval metadata for the ticket"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/servicedeskapi/request/{{ jira_issue_key }}/approval"
-        method: GET
-        user: "{{ jira_user }}"
+    - name: "TASK 2 | Assign ticket to approver"
+      community.general.jira:
+        uri: "{{ jira_url }}"
+        username: "{{ jira_user }}"
         password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        headers:
-          Content-Type: "application/json"
-        status_code: [200]
-        validate_certs: true
-      register: jira_approval_meta
-      ignore_errors: true  # Some projects may not have approval steps configured
+        issue: "{{ jira_issue_key }}"
+        operation: edit
+        assignee: "{{ jira_approver_username }}"
 
-    - name: "TASK 2 | Assign approver via Jira issue field update"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/api/3/issue/{{ jira_issue_key }}"
-        method: PUT
-        user: "{{ jira_user }}"
+    - name: "TASK 2 | Add approval-request comment mentioning approver"
+      community.general.jira:
+        uri: "{{ jira_url }}"
+        username: "{{ jira_user }}"
         password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-        body:
-          fields:
-            assignee:
-              accountId: "{{ jira_approver_account_id }}"
-        status_code: [200, 204]
-        validate_certs: true
-      register: jira_assign_result
-
-    - name: "TASK 2 | Add approver as watcher for notification"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/api/3/issue/{{ jira_issue_key }}/watchers"
-        method: POST
-        user: "{{ jira_user }}"
-        password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-        body: "{{ jira_approver_account_id }}"
-        status_code: [200, 204]
-        validate_certs: true
-      ignore_errors: true
-
-    - name: "TASK 2 | Add approval comment mentioning approver"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/api/3/issue/{{ jira_issue_key }}/comment"
-        method: POST
-        user: "{{ jira_user }}"
-        password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        body_format: json
-        headers:
-          Content-Type: "application/json"
-        body:
-          body:
-            type: "doc"
-            version: 1
-            content:
-              - type: "paragraph"
-                content:
-                  - type: "text"
-                    text: "Approval requested. "
-                  - type: "mention"
-                    attrs:
-                      id: "{{ jira_approver_account_id }}"
-                      text: "@approver"
-                  - type: "text"
-                    text: " — please review and approve this request."
-        status_code: [200, 201]
-        validate_certs: true
+        issue: "{{ jira_issue_key }}"
+        operation: comment
+        comment: >
+          Approval requested. {{ jira_approver_display }} — please review and
+          approve or deny this request. This ticket was created automatically
+          by Ansible. Ticket URL: {{ jira_issue_url }}
 
     - name: "TASK 2 | Confirm approver assignment"
       ansible.builtin.debug:
-        msg: "✅ Approver (accountId: {{ jira_approver_account_id }}) assigned to {{ jira_issue_key }}"
+        msg: "✅ Approver '{{ jira_approver_username }}' assigned to {{ jira_issue_key }}"
 
     # -------------------------------------------------------------------------
     # TASK 3: Send Mattermost Notification — Ticket Created
+    # Module : community.general.mattermost
+    # Docs   : https://docs.ansible.com/ansible/latest/collections/community/general/mattermost_module.html
     # -------------------------------------------------------------------------
     - name: "TASK 3 | Send Mattermost notification — ticket created"
       community.general.mattermost:
         url: "{{ mattermost_url }}"
-        api_key: "{{ mattermost_apikey }}"
-        text:  |
-            ## 🎫 New Jira Approval Ticket Created
-            | Field       | Value |
-            |-------------|-------|
-            | **Ticket**  | [{{ jira_issue_key }}]({{ jira_issue_url }}) |
-            | **ID**      | `{{ jira_issue_id }}` |
-            | **Summary** | {{ jira_summary }} |
-            | **Status**  | 🟡 Awaiting Approval |
+        api_key: "{{ mattermost_api_key }}"
+        channel_id: "{{ mattermost_channel }}"
+        username: "{{ mattermost_username }}"
+        text: |
+          ## 🎫 New Jira Approval Ticket Created
+          | Field        | Value |
+          |--------------|-------|
+          | **Ticket**   | [{{ jira_issue_key }}]({{ jira_issue_url }}) |
+          | **ID**       | `{{ jira_issue_id }}` |
+          | **Summary**  | {{ jira_summary }} |
+          | **Assignee** | {{ jira_approver_display }} |
+          | **Status**   | 🟡 Awaiting Approval |
 
-            > An approver has been notified. Waiting for approval...
-        channel: "off-topic"
-        priority: important
-        validate_certs: false
-        username: system-bot
-      delegate_to: localhost
-      register: mm_notify_created
+          > Approver has been notified. Waiting for approval...
 
     - name: "TASK 3 | Confirm Mattermost notification sent"
       ansible.builtin.debug:
-        msg: "✅ Mattermost notification sent for ticket creation ({{ jira_issue_key }})"
+        msg: "✅ Mattermost notification sent — ticket {{ jira_issue_key }} created"
 
     # -------------------------------------------------------------------------
     # TASK 4: Poll Jira Until Ticket Status Is "Approved"
+    # Module : community.general.jira (operation: fetch)
     # -------------------------------------------------------------------------
     - name: "TASK 4 | Poll Jira ticket status until approved"
-      ansible.builtin.uri:
-        url: "{{ jira_url }}/rest/api/3/issue/{{ jira_issue_key }}?fields=status,summary"
-        method: GET
-        user: "{{ jira_user }}"
+      community.general.jira:
+        uri: "{{ jira_url }}"
+        username: "{{ jira_user }}"
         password: "{{ jira_api_token }}"
-        force_basic_auth: true
-        headers:
-          Content-Type: "application/json"
-        status_code: [200]
-        validate_certs: true
+        issue: "{{ jira_issue_key }}"
+        operation: fetch
       register: jira_poll_result
-      until: jira_poll_result.json.fields.status.name == jira_approved_status
+      until: jira_poll_result.meta.fields.status.name == jira_approved_status
       retries: "{{ approval_poll_max_retries }}"
       delay: "{{ approval_poll_interval_seconds }}"
-      failed_when: false  # Don't hard-fail; handle timeout below
+      failed_when: false  # Prevent hard-fail on retry exhaustion; handled gracefully below
 
     - name: "TASK 4 | Capture final ticket status"
       ansible.builtin.set_fact:
-        jira_final_status: "{{ jira_poll_result.json.fields.status.name }}"
+        jira_final_status: "{{ jira_poll_result.meta.fields.status.name }}"
 
-    - name: "TASK 4 | Fail if ticket was not approved within timeout"
+    - name: "TASK 4 | Fail gracefully if approval timed out"
       ansible.builtin.fail:
         msg: >
           ❌ Ticket {{ jira_issue_key }} was NOT approved within the allotted time.
-          Final status: '{{ jira_final_status }}'.
-          Max wait: {{ (approval_poll_max_retries | int) * (approval_poll_interval_seconds | int) }} seconds.
+          Final status : '{{ jira_final_status }}'.
+          Max wait     : {{ (approval_poll_max_retries | int) * (approval_poll_interval_seconds | int) }} seconds.
+          Check ticket : {{ jira_issue_url }}
       when: jira_final_status != jira_approved_status
 
     - name: "TASK 4 | Log approval confirmation"
@@ -223,26 +139,25 @@
 
     # -------------------------------------------------------------------------
     # TASK 5: Send Mattermost Notification — Ticket Approved
+    # Module : community.general.mattermost
     # -------------------------------------------------------------------------
     - name: "TASK 5 | Send Mattermost notification — ticket approved"
       community.general.mattermost:
         url: "{{ mattermost_url }}"
-        api_key: "{{ mattermost_apikey }}"
+        api_key: "{{ mattermost_api_key }}"
+        channel_id: "{{ mattermost_channel }}"
+        username: "{{ mattermost_username }}"
         text: |
-            ## ✅ Jira Ticket Approved!
-            | Field       | Value |
-            |-------------|-------|
-            | **Ticket**  | [{{ jira_issue_key }}]({{ jira_issue_url }}) |
-            | **ID**      | `{{ jira_issue_id }}` |
-            | **Summary** | {{ jira_summary }} |
-            | **Status**  | 🟢 **APPROVED** |
+          ## ✅ Jira Ticket Approved!
+          | Field        | Value |
+          |--------------|-------|
+          | **Ticket**   | [{{ jira_issue_key }}]({{ jira_issue_url }}) |
+          | **ID**       | `{{ jira_issue_id }}` |
+          | **Summary**  | {{ jira_summary }} |
+          | **Assignee** | {{ jira_approver_display }} |
+          | **Status**   | 🟢 **APPROVED** |
 
-            > The request has been approved. Proceeding with automated workflow.
-        channel: "off-topic"
-        priority: important
-        validate_certs: false
-        username: system-bot
-      delegate_to: localhost
+          > The request has been approved. Proceeding with the automated workflow.
 
     - name: "TASK 5 | Confirm approval notification sent"
       ansible.builtin.debug:
