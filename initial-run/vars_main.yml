@@ -10,9 +10,9 @@
 # =============================================================================
 
 # --- Jira Connection ---
-jira_url: "https://your-org.atlassian.net"
-jira_user: "your@email.com"
-jira_api_token: "YOUR_JIRA_API_TOKEN"        # ⚠️  Encrypt with ansible-vault
+jira_url: "https://ivteknologi-infra.atlassian.net/"
+jira_user: "arief@ivteknologi.com"
+jira_api_token: "ATATT3xFfGF0622OgbfOiCq5F4lsyO6vX2KfLH_wJxreH5PbSWeNNaos2SPbzHtrkOF8TLBywHUqEyYSmz2UshJKkhcV-NDxpGRSl97WEUOo8ojBP6PrFBHikk6isf-0pMhy4r7k4Ntmaa2mIkN1FaCj6_u1KyLFdXgpN11D3Ng9b7Ma2axTbCA=8B80F536"        # ⚠️  Encrypt with ansible-vault
 
 # --- Jira Project & Ticket Config ---
 jira_project_key: "SD"
@@ -29,17 +29,17 @@ jira_priority: "Medium"
 # To find your serviceDeskId and requestTypeId:
 #   curl -u user:token https://your-org.atlassian.net/rest/servicedeskapi/servicedesk
 #   curl -u user:token https://your-org.atlassian.net/rest/servicedeskapi/servicedesk/{id}/requesttype
-jira_request_type_id: "10010"
+jira_request_type_id: "10003"
 
 # --- Approver ---
 # To find accountId:
 #   curl -u user:token "https://your-org.atlassian.net/rest/api/3/user/search?query=firstname.lastname"
-jira_approver_account_id: "APPROVER_ACCOUNT_ID"
+jira_approver_account_id: "712020"
 
 # --- Mattermost ---
-mattermost_webhook_url: "https://mattermost.example.com/hooks/YOUR_WEBHOOK_ID"   # ⚠️  Encrypt with ansible-vault
-mattermost_channel: "devops-approvals"
-mattermost_username: "AnsibleBot"
+mattermost_webhook_url: "https://mm-ivt.ddns.my.id/hooks/kkhs7gmni3nmd85a38aor69czo"   # ⚠️  Encrypt with ansible-vault
+mattermost_channel: "off-topic"
+mattermost_username: "system-bot"
 mattermost_icon_emoji: ":robot_face:"
 
 # --- Polling / Timeout ---
