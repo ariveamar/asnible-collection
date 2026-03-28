@@ -12,8 +12,7 @@
 # --- Jira Connection ---
 jira_url: "https://ivteknologi-infra.atlassian.net/"
 jira_user: "arief@ivteknologi.com"
-jira_api_token: "ATATT3xFfGF0_DnHuNq5gB-FtRWYsl1wdA02NpCi1q9qbUlBObgMZWrBipnyT4UlmNyK5OC7FridOPYDprao5lElgx6yNt_XN6qcUcgXIxihoPdPV2lLw3P7j7iCpclNCWwwLpVVJtObcRFn2Uz4jbBop6yW8cFQW22Q0bpOspmJ-m0ZhV-JjD8=75F2EAA8"
-
+jira_api_token: "ATATT3xFfGF0fqYz8zw3gEehRL4Hk16Uu01GmGKC28s3WuiXJAmoHhQKmrVNDMJgCo49c1vpgGlkpb9Pdhcq6QtfVirm7AxbpI29Htp69icLlorGAZ9muv4nGP6E71cZnm4qNdpOXVT2H3aGav1N4umWX3myGDwY7VgMV5uizSkeS7y4f91HMd0=912F1912"
 # --- Jira Project & Ticket Config ---
 jira_project_key: "SUP"
 jira_issue_type: "Request a change"
