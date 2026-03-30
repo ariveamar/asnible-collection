@@ -1,7 +1,5 @@
 - name: Dynamic hosts from external file
   hosts: "{{ target_hosts }}"
-  vars_files:
-    - ./targets.yml
 
   tasks:
     - debug:
