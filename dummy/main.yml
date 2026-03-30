@@ -1,13 +1,7 @@
----
-- name: Set targeted DB IP address
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: Set targeted DB IP address for failover
-      set_fact:
-        db_ipaddr: "{{ db_target }}"
 - name: Dynamic hosts from external file
-  hosts: "{{ db_ipaddr }}"
+  hosts: "{{ target_hosts }}"
+  vars_files:
+    - ./targets.yml
 
   tasks:
     - debug:
