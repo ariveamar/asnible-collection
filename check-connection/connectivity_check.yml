@@ -32,7 +32,7 @@
     # 0. Timestamp
     # ----------------------------------------------------------
     - name: Collect current timestamp
-      ansible.builtin.command: date -u +"%Y-%m-%dT%H:%M:%SZ"
+      ansible.builtin.shell: date -u +"%Y-%m-%dT%H:%M:%SZ"
       register: ts_raw
       changed_when: false
 
@@ -45,7 +45,7 @@
     #    delegate_to drives the command from each source host
     # ----------------------------------------------------------
     - name: "PING | {{ item.0.alias }} → {{ item.1.alias }} ({{ item.1.hostname }})"
-      ansible.builtin.command: >
+      ansible.builtin.shell: >
         ping -c {{ ping_count }} -W {{ ping_timeout }} {{ item.1.hostname }}
       register: ping_raw
       loop: "{{ check_sources | product(check_targets) | list }}"
