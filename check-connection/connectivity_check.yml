@@ -1,0 +1,412 @@
+---
+# ==============================================================
+# Playbook  : connectivity_check.yml
+# Description: Check ICMP ping + TCP port reachability from
+#              MULTIPLE SOURCE hosts to MULTIPLE TARGET hosts/ports,
+#              then publish a combined report to Mattermost and Confluence.
+#
+# Flow:
+#   Play 1 – Run checks on each source host (delegated execution)
+#   Play 2 – Aggregate results and publish reports (localhost)
+#
+# Usage:
+#   ansible-playbook -i inventory.ini connectivity_check.yml
+#   ansible-playbook -i inventory.ini connectivity_check.yml \
+#     -e "mattermost_channel=ops-alerts"
+# ==============================================================
+
+# ==============================================================
+# PLAY 1 – Execute checks from each source host
+# ==============================================================
+- name: "Play 1 | Run connectivity checks from each source host"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars/targets.yml
+
+  tasks:
+
+    # ----------------------------------------------------------
+    # 0. Timestamp
+    # ----------------------------------------------------------
+    - name: Collect current timestamp
+      ansible.builtin.command: date -u +"%Y-%m-%dT%H:%M:%SZ"
+      register: ts_raw
+      changed_when: false
+
+    - name: Set report timestamp fact
+      ansible.builtin.set_fact:
+        report_ts: "{{ ts_raw.stdout | trim }}"
+
+    # ----------------------------------------------------------
+    # 1. PING CHECK – per source × target combination
+    #    delegate_to drives the command from each source host
+    # ----------------------------------------------------------
+    - name: "PING | {{ item.0.alias }} → {{ item.1.alias }} ({{ item.1.hostname }})"
+      ansible.builtin.command: >
+        ping -c {{ ping_count }} -W {{ ping_timeout }} {{ item.1.hostname }}
+      register: ping_raw
+      loop: "{{ check_sources | product(check_targets) | list }}"
+      loop_control:
+        label: "{{ item.0.alias }} → {{ item.1.alias }}"
+      delegate_to: "{{ item.0.hostname }}"
+      ignore_errors: true
+      changed_when: false
+
+    - name: Build ping result facts
+      ansible.builtin.set_fact:
+        ping_results: >-
+          {{
+            ping_results | default([]) + [{
+              'source_alias':  item.item.0.alias,
+              'source_host':   item.item.0.hostname,
+              'target_alias':  item.item.1.alias,
+              'target_host':   item.item.1.hostname,
+              'status':        ('UP'   if item.rc == 0 else 'DOWN'),
+              'detail':        (item.stdout_lines | last | default('no output'))
+                               if item.rc == 0
+                               else (item.stderr | default('timeout / unreachable') | trim)
+            }]
+          }}
+      loop: "{{ ping_raw.results }}"
+      loop_control:
+        label: "{{ item.item.0.alias }} → {{ item.item.1.alias }}"
+
+    # ----------------------------------------------------------
+    # 2. TCP PORT CHECK – per source × (target × port) combination
+    # ----------------------------------------------------------
+    - name: "PORT | {{ item.0.alias }} → {{ item.1.0.alias }}:{{ item.1.1 }}"
+      ansible.builtin.wait_for:
+        host: "{{ item.1.0.hostname }}"
+        port: "{{ item.1.1 }}"
+        timeout: "{{ port_check_timeout }}"
+        state: started
+      register: port_raw
+      loop: "{{ check_sources | product(check_targets | subelements('ports')) | list }}"
+      loop_control:
+        label: "{{ item.0.alias }} → {{ item.1.0.alias }}:{{ item.1.1 }}"
+      delegate_to: "{{ item.0.hostname }}"
+      ignore_errors: true
+
+    - name: Build port result facts
+      ansible.builtin.set_fact:
+        port_results: >-
+          {{
+            port_results | default([]) + [{
+              'source_alias':  item.item.0.alias,
+              'source_host':   item.item.0.hostname,
+              'target_alias':  item.item.1.0.alias,
+              'target_host':   item.item.1.0.hostname,
+              'port':          item.item.1.1,
+              'status':        ('OPEN'   if not item.failed else 'CLOSED'),
+              'detail':        ('' if not item.failed else (item.msg | default('connection refused / timeout') | trim))
+            }]
+          }}
+      loop: "{{ port_raw.results }}"
+      loop_control:
+        label: "{{ item.item.0.alias }} → {{ item.item.1.0.alias }}:{{ item.item.1.1 }}"
+
+    # ----------------------------------------------------------
+    # 3. SUMMARY STATS
+    # ----------------------------------------------------------
+    - name: Compute summary statistics
+      ansible.builtin.set_fact:
+        stat_ping_total:  "{{ ping_results | length }}"
+        stat_ping_up:     "{{ ping_results | selectattr('status', 'equalto', 'UP')     | list | length }}"
+        stat_ping_down:   "{{ ping_results | selectattr('status', 'equalto', 'DOWN')   | list | length }}"
+        stat_port_total:  "{{ port_results | length }}"
+        stat_port_open:   "{{ port_results | selectattr('status', 'equalto', 'OPEN')   | list | length }}"
+        stat_port_closed: "{{ port_results | selectattr('status', 'equalto', 'CLOSED') | list | length }}"
+
+    # ----------------------------------------------------------
+    # 4. BUILD MATTERMOST MESSAGE
+    #    Grouped by source host for readability
+    # ----------------------------------------------------------
+    - name: Build Mattermost message body
+      ansible.builtin.set_fact:
+        mm_message: ""
+
+    - name: "Build Mattermost section for source: {{ src_item.alias }}"
+      vars:
+        src_ping: "{{ ping_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
+        src_port: "{{ port_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
+        src_ping_up: "{{ src_ping | selectattr('status', 'equalto', 'UP') | list | length }}"
+        src_port_open: "{{ src_port | selectattr('status', 'equalto', 'OPEN') | list | length }}"
+      ansible.builtin.set_fact:
+        mm_message: >-
+          {{ mm_message }}
+
+          ---
+          #### :computer: Source: {{ src_item.alias }} (`{{ src_item.hostname }}`)
+
+          **Ping** ({{ src_ping_up }}/{{ src_ping | length }} UP)
+          | Target | Hostname | Status |
+          |--------|----------|--------|
+          {% for r in src_ping %}| {{ r.target_alias }} | {{ r.target_host }} | {{ ':white_check_mark: UP' if r.status == 'UP' else ':x: DOWN' }} |
+          {% endfor %}
+
+          **Ports** ({{ src_port_open }}/{{ src_port | length }} OPEN)
+          | Target | Hostname | Port | Status |
+          |--------|----------|------|--------|
+          {% for r in src_port %}| {{ r.target_alias }} | {{ r.target_host }} | {{ r.port }} | {{ ':white_check_mark: OPEN' if r.status == 'OPEN' else ':x: CLOSED' }} |
+          {% endfor %}
+      loop: "{{ check_sources }}"
+      loop_control:
+        loop_var: src_item
+        label: "{{ src_item.alias }}"
+
+    - name: Prepend Mattermost header
+      ansible.builtin.set_fact:
+        mm_message: |
+          ### :satellite: Connectivity Check Report
+          **Timestamp:** {{ report_ts }}
+          **Sources checked:** {{ check_sources | length }} &nbsp;|&nbsp; **Targets:** {{ check_targets | length }}
+          **Ping overall:** {{ stat_ping_up }}/{{ stat_ping_total }} UP &nbsp;|&nbsp; **Ports overall:** {{ stat_port_open }}/{{ stat_port_total }} OPEN
+          {{ mm_message }}
+
+    # ----------------------------------------------------------
+    # 5. SEND TO MATTERMOST
+    # ----------------------------------------------------------
+    - name: Send report to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_url }}"
+        api_key: "{{ mattermost_token }}"
+        channel_id: "{{ mattermost_channel }}"
+        text: "{{ mm_message }}"
+        username: "{{ mattermost_username }}"
+        icon_url: "{{ mattermost_icon_url }}"
+      delegate_to: localhost
+
+    # ----------------------------------------------------------
+    # 6. BUILD CONFLUENCE HTML PAGE
+    # ----------------------------------------------------------
+    - name: Set Confluence page title
+      ansible.builtin.set_fact:
+        confluence_page_title: "Connectivity Report – {{ report_ts }}"
+
+    - name: Build Confluence source sections HTML
+      ansible.builtin.set_fact:
+        cf_source_sections: ""
+
+    - name: "Build Confluence section for source: {{ src_item.alias }}"
+      vars:
+        src_ping: "{{ ping_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
+        src_port: "{{ port_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
+        src_ping_up:    "{{ src_ping | selectattr('status', 'equalto', 'UP')   | list | length }}"
+        src_port_open:  "{{ src_port | selectattr('status', 'equalto', 'OPEN') | list | length }}"
+      ansible.builtin.set_fact:
+        cf_source_sections: >-
+          {{ cf_source_sections }}
+          <h3>&#128187; Source: {{ src_item.alias }} (<code>{{ src_item.hostname }}</code>)</h3>
+
+          <h4>&#128200; Ping Results ({{ src_ping_up }}/{{ src_ping | length }} UP)</h4>
+          <table>
+            <thead><tr><th>Target Alias</th><th>Hostname / IP</th><th>Status</th><th>Detail</th></tr></thead>
+            <tbody>
+              {% for r in src_ping %}
+              <tr>
+                <td>{{ r.target_alias }}</td>
+                <td><code>{{ r.target_host }}</code></td>
+                <td>{% if r.status == 'UP' %}<span style="color:#00875A"><strong>&#10004; UP</strong></span>{% else %}<span style="color:#DE350B"><strong>&#10008; DOWN</strong></span>{% endif %}</td>
+                <td>{{ r.detail }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <h4>&#128268; TCP Port Results ({{ src_port_open }}/{{ src_port | length }} OPEN)</h4>
+          <table>
+            <thead><tr><th>Target Alias</th><th>Hostname / IP</th><th>Port</th><th>Status</th><th>Detail</th></tr></thead>
+            <tbody>
+              {% for r in src_port %}
+              <tr>
+                <td>{{ r.target_alias }}</td>
+                <td><code>{{ r.target_host }}</code></td>
+                <td><strong>{{ r.port }}</strong></td>
+                <td>{% if r.status == 'OPEN' %}<span style="color:#00875A"><strong>&#10004; OPEN</strong></span>{% else %}<span style="color:#DE350B"><strong>&#10008; CLOSED</strong></span>{% endif %}</td>
+                <td>{{ r.detail }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+      loop: "{{ check_sources }}"
+      loop_control:
+        loop_var: src_item
+        label: "{{ src_item.alias }}"
+
+    - name: Assemble full Confluence page body
+      ansible.builtin.set_fact:
+        cf_page_body: |
+          <h2>Connectivity Check Report</h2>
+          <p>
+            <strong>Timestamp:</strong> {{ report_ts }}<br/>
+            <strong>Sources:</strong> {{ check_sources | map(attribute='alias') | join(', ') }}<br/>
+            <strong>Targets:</strong> {{ check_targets | map(attribute='alias') | join(', ') }}
+          </p>
+
+          <ac:structured-macro ac:name="info">
+            <ac:rich-text-body>
+              <p>
+                <strong>Overall Ping:</strong> {{ stat_ping_up }}/{{ stat_ping_total }} UP &nbsp;|&nbsp;
+                <strong>Overall Ports:</strong> {{ stat_port_open }}/{{ stat_port_total }} OPEN
+              </p>
+            </ac:rich-text-body>
+          </ac:structured-macro>
+
+          {{ cf_source_sections | trim }}
+
+    # ----------------------------------------------------------
+    # 7. RESOLVE CONFLUENCE PARENT PAGE ID (optional)
+    # ----------------------------------------------------------
+    - name: Look up Confluence parent page ID
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}/rest/api/content?spaceKey={{ confluence_space_key }}&title={{ confluence_parent_page_title | urlencode }}&expand=version"
+        method: GET
+        user: "{{ confluence_username }}"
+        password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: cf_parent_lookup
+      delegate_to: localhost
+      when: confluence_parent_page_title != ""
+
+    - name: Set parent page ID fact
+      ansible.builtin.set_fact:
+        cf_parent_id: "{{ cf_parent_lookup.json.results[0].id | default('') }}"
+      when:
+        - confluence_parent_page_title != ""
+        - cf_parent_lookup.json.results | length > 0
+
+    - name: Set empty parent ID when parent not configured
+      ansible.builtin.set_fact:
+        cf_parent_id: ""
+      when: confluence_parent_page_title == "" or cf_parent_lookup is skipped
+
+    # ----------------------------------------------------------
+    # 8. CHECK IF PAGE ALREADY EXISTS
+    # ----------------------------------------------------------
+    - name: Search for existing Confluence page
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}/rest/api/content?spaceKey={{ confluence_space_key }}&title={{ confluence_page_title | urlencode }}&expand=version"
+        method: GET
+        user: "{{ confluence_username }}"
+        password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: cf_existing_page
+      delegate_to: localhost
+
+    - name: Set existing page facts
+      ansible.builtin.set_fact:
+        cf_page_exists:    "{{ cf_existing_page.json.results | length > 0 }}"
+        cf_existing_id:    "{{ cf_existing_page.json.results[0].id | default('') }}"
+        cf_existing_ver:   "{{ cf_existing_page.json.results[0].version.number | default(0) | int }}"
+
+    # ----------------------------------------------------------
+    # 9a. CREATE Confluence page
+    # ----------------------------------------------------------
+    - name: Create new Confluence page
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}/rest/api/content"
+        method: POST
+        user: "{{ confluence_username }}"
+        password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        body_format: json
+        body: >-
+          {{
+            {
+              'type': 'page',
+              'title': confluence_page_title,
+              'space': { 'key': confluence_space_key },
+              'ancestors': ([{'id': cf_parent_id}] if cf_parent_id != '' else []),
+              'body': {
+                'storage': {
+                  'value': cf_page_body,
+                  'representation': 'storage'
+                }
+              }
+            }
+          }}
+        status_code: 200
+        return_content: true
+      register: cf_create_result
+      delegate_to: localhost
+      when: not cf_page_exists
+
+    - name: Set new page URL fact
+      ansible.builtin.set_fact:
+        cf_page_url: "{{ confluence_base_url }}{{ cf_create_result.json._links.webui }}"
+      when: not cf_page_exists
+
+    # ----------------------------------------------------------
+    # 9b. UPDATE Confluence page
+    # ----------------------------------------------------------
+    - name: Update existing Confluence page
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}/rest/api/content/{{ cf_existing_id }}"
+        method: PUT
+        user: "{{ confluence_username }}"
+        password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        body_format: json
+        body: >-
+          {{
+            {
+              'type': 'page',
+              'title': confluence_page_title,
+              'space': { 'key': confluence_space_key },
+              'version': { 'number': cf_existing_ver + 1 },
+              'body': {
+                'storage': {
+                  'value': cf_page_body,
+                  'representation': 'storage'
+                }
+              }
+            }
+          }}
+        status_code: 200
+        return_content: true
+      register: cf_update_result
+      delegate_to: localhost
+      when: cf_page_exists
+
+    - name: Set updated page URL fact
+      ansible.builtin.set_fact:
+        cf_page_url: "{{ confluence_base_url }}{{ cf_update_result.json._links.webui }}"
+      when: cf_page_exists
+
+    # ----------------------------------------------------------
+    # 10. SEND CONFLUENCE LINK TO MATTERMOST
+    # ----------------------------------------------------------
+    - name: Send Confluence page link to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_url }}"
+        api_key: "{{ mattermost_token }}"
+        channel_id: "{{ mattermost_channel }}"
+        text: ":confluence: Full report published → [{{ confluence_page_title }}]({{ cf_page_url }})"
+        username: "{{ mattermost_username }}"
+        icon_url: "{{ mattermost_icon_url }}"
+      delegate_to: localhost
+
+    # ----------------------------------------------------------
+    # 11. CONSOLE SUMMARY
+    # ----------------------------------------------------------
+    - name: Print connectivity summary
+      ansible.builtin.debug:
+        msg:
+          - "============================================"
+          - " CONNECTIVITY CHECK SUMMARY"
+          - "============================================"
+          - "Timestamp : {{ report_ts }}"
+          - "Sources   : {{ check_sources | map(attribute='alias') | join(', ') }}"
+          - "Targets   : {{ check_targets | map(attribute='alias') | join(', ') }}"
+          - "--------------------------------------------"
+          - "Ping  : {{ stat_ping_up }}/{{ stat_ping_total }} UP   ({{ stat_ping_down }} DOWN)"
+          - "Ports : {{ stat_port_open }}/{{ stat_port_total }} OPEN ({{ stat_port_closed }} CLOSED)"
+          - "--------------------------------------------"
+          - "Confluence: {{ cf_page_url }}"
