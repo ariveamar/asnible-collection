@@ -1,5 +1,5 @@
 - name: "Play 1 | Run connectivity checks on {{ inventory_hostname }}"
-  hosts: check_source
+  hosts: '{{ check_source }}'
   gather_facts: false
  
   vars_files:
