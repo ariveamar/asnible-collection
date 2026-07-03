@@ -45,8 +45,11 @@
     #    delegate_to drives the command from each source host
     # ----------------------------------------------------------
     - name: "PING | {{ item.0.alias }} → {{ item.1.alias }} ({{ item.1.hostname }})"
-      ansible.builtin.shell: >
-        ping -c {{ ping_count }} -W {{ ping_timeout }} {{ item.1.hostname }}
+      ansible.builtin.shell:
+        cmd: |
+          PING_BIN=$(command -v ping || echo /bin/ping)
+          $PING_BIN -c {{ ping_count }} -W {{ ping_timeout }} {{ item.1.hostname }} 2>&1 | tail -2
+        executable: /bin/bash
       register: ping_raw
       loop: "{{ check_sources | product(check_targets) | list }}"
       loop_control:
@@ -54,7 +57,7 @@
       delegate_to: "{{ item.0.hostname }}"
       ignore_errors: true
       changed_when: false
-
+ 
     - name: Build ping result facts
       ansible.builtin.set_fact:
         ping_results: >-
@@ -64,10 +67,11 @@
               'source_host':   item.item.0.hostname,
               'target_alias':  item.item.1.alias,
               'target_host':   item.item.1.hostname,
-              'status':        ('UP'   if item.rc == 0 else 'DOWN'),
-              'detail':        (item.stdout_lines | last | default('no output'))
+              'status':        ('UP' if item.rc == 0 else 'DOWN'),
+              'detail':        (item.stdout_lines | select('match', '.*packet.*') | list | first
+                                | default(item.stdout_lines | last | default('ok')))
                                if item.rc == 0
-                               else (item.stderr | default('timeout / unreachable') | trim)
+                               else 'timeout or unreachable'
             }]
           }}
       loop: "{{ ping_raw.results }}"
