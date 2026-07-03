@@ -1,0 +1,60 @@
+---
+# ============================================================
+# SOURCE HOSTS that will perform the checks
+# These must be reachable via SSH and present in inventory,
+# OR use "localhost" for the Ansible controller itself.
+# ============================================================
+check_sources:
+  - hostname: "localhost"
+    alias: "Ansible Controller"
+
+  - hostname: "10.10.1.10"
+    alias: "Jump Server JKT"
+
+  - hostname: "10.10.2.10"
+    alias: "Jump Server SBY"
+
+# ============================================================
+# TARGET hosts and ports to check
+# ============================================================
+check_targets:
+  - hostname: "10.10.10.1"
+    alias: "App Server 1"
+    ports: [80, 443, 8080]
+
+  - hostname: "10.10.10.2"
+    alias: "Database Server"
+    ports: [5432, 3306]
+
+  - hostname: "10.10.10.3"
+    alias: "Cache Server"
+    ports: [6379, 11211]
+
+# ============================================================
+# Ping settings
+# ============================================================
+ping_count: 3
+ping_timeout: 5        # seconds
+
+# ============================================================
+# Port check settings
+# ============================================================
+port_check_timeout: 5  # seconds
+
+# ============================================================
+# Mattermost settings
+# ============================================================
+mattermost_url: "https://mattermost.example.com"
+mattermost_token: "{{ lookup('env', 'MATTERMOST_TOKEN') }}"
+mattermost_channel: "iaac-channel"
+mattermost_username: "cindi-bot"
+mattermost_icon_url: "https://mattermost.example.com/cindi-bot.png"
+
+# ============================================================
+# Confluence settings
+# ============================================================
+confluence_base_url: "https://pegadaian-sandbox-187.atlassian.net/wiki"
+confluence_username: "{{ lookup('env', 'CONFLUENCE_USER') }}"
+confluence_api_token: "{{ lookup('env', 'CONFLUENCE_TOKEN') }}"
+confluence_space_key: "IAAC"
+confluence_parent_page_title: "Connectivity Reports"   # Set to "" if no parent
