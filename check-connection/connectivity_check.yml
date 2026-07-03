@@ -183,4 +183,3 @@
           - "Ping  : {{ stat_ping_up }}/{{ stat_ping_total }} UP   ({{ stat_ping_down }} DOWN)"
           - "Ports : {{ stat_port_open }}/{{ stat_port_total }} OPEN ({{ stat_port_closed }} CLOSED)"
           - "--------------------------------------------"
-          - "Confluence: {{ cf_page_url }}"
