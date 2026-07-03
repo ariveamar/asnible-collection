@@ -8,27 +8,20 @@ check_sources:
   - hostname: "localhost"
     alias: "Ansible Controller"
 
-  - hostname: "10.10.1.10"
-    alias: "Jump Server JKT"
-
-  - hostname: "10.10.2.10"
-    alias: "Jump Server SBY"
+  - hostname: "192.168.80.33"
+    alias: "IDM3"
 
 # ============================================================
 # TARGET hosts and ports to check
 # ============================================================
 check_targets:
-  - hostname: "10.10.10.1"
-    alias: "App Server 1"
-    ports: [80, 443, 8080]
+  - hostname: "192.168.80.128"
+    alias: "Ansible"
+    ports: [443]
 
-  - hostname: "10.10.10.2"
-    alias: "Database Server"
-    ports: [5432, 3306]
-
-  - hostname: "10.10.10.3"
-    alias: "Cache Server"
-    ports: [6379, 11211]
+  - hostname: "103.101.230.166"
+    alias: "VPN"
+    ports: [1001, 443]
 
 # ============================================================
 # Ping settings
