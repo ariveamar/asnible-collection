@@ -4,7 +4,7 @@
 # These must be reachable via SSH and present in inventory,
 # OR use "localhost" for the Ansible controller itself.
 # ============================================================
-check_source: "192.168.80.33"
+check_source: 192.168.80.33
 
 # ============================================================
 # TARGET hosts and ports to check
