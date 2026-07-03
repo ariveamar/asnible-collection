@@ -5,9 +5,6 @@
 # OR use "localhost" for the Ansible controller itself.
 # ============================================================
 check_sources:
-  - hostname: "localhost"
-    alias: "Ansible Controller"
-
   - hostname: "192.168.80.33"
     alias: "IDM3"
 
