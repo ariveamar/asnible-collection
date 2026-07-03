@@ -1,60 +1,39 @@
----
-# ==============================================================
-# Playbook  : connectivity_check.yml
-# Description: Check ICMP ping + TCP port reachability from
-#              MULTIPLE SOURCE hosts to MULTIPLE TARGET hosts/ports,
-#              then publish a combined report to Mattermost and Confluence.
-#
-# Flow:
-#   Play 1 – Run checks on each source host (delegated execution)
-#   Play 2 – Aggregate results and publish reports (localhost)
-#
-# Usage:
-#   ansible-playbook -i inventory.ini connectivity_check.yml
-#   ansible-playbook -i inventory.ini connectivity_check.yml \
-#     -e "mattermost_channel=ops-alerts"
-# ==============================================================
-
-# ==============================================================
-# PLAY 1 – Execute checks from each source host
-# ==============================================================
-- name: "Play 1 | Run connectivity checks from each source host"
-  hosts: localhost
-  connection: local
+- name: "Play 1 | Run connectivity checks on {{ inventory_hostname }}"
+  hosts: check_source
   gather_facts: false
-
+ 
   vars_files:
     - vars/targets.yml
-
+ 
   tasks:
-
+ 
     # ----------------------------------------------------------
     # 0. Timestamp
     # ----------------------------------------------------------
     - name: Collect current timestamp
-      ansible.builtin.shell: date -u +"%Y-%m-%dT%H:%M:%SZ"
+      ansible.builtin.shell:
+        cmd: date -u +"%Y-%m-%dT%H:%M:%SZ"
+        executable: /bin/bash
       register: ts_raw
       changed_when: false
-
+ 
     - name: Set report timestamp fact
       ansible.builtin.set_fact:
         report_ts: "{{ ts_raw.stdout | trim }}"
-
+ 
     # ----------------------------------------------------------
-    # 1. PING CHECK – per source × target combination
-    #    delegate_to drives the command from each source host
+    # 1. PING CHECK – run from this host to each target
     # ----------------------------------------------------------
-    - name: "PING | {{ item.0.alias }} → {{ item.1.alias }} ({{ item.1.hostname }})"
+    - name: "PING | {{ inventory_hostname }} → {{ item.alias }} ({{ item.hostname }})"
       ansible.builtin.shell:
         cmd: |
           PING_BIN=$(command -v ping || echo /bin/ping)
-          $PING_BIN -c {{ ping_count }} -W {{ ping_timeout }} {{ item.1.hostname }} 2>&1 | tail -2
+          $PING_BIN -c {{ ping_count }} -W {{ ping_timeout }} {{ item.hostname }} 2>&1 | tail -2
         executable: /bin/bash
       register: ping_raw
-      loop: "{{ check_sources | product(check_targets) | list }}"
+      loop: "{{ check_targets }}"
       loop_control:
-        label: "{{ item.0.alias }} → {{ item.1.alias }}"
-      delegate_to: "{{ item.0.hostname }}"
+        label: "{{ item.alias }} ({{ item.hostname }})"
       ignore_errors: true
       changed_when: false
  
@@ -63,55 +42,50 @@
         ping_results: >-
           {{
             ping_results | default([]) + [{
-              'source_alias':  item.item.0.alias,
-              'source_host':   item.item.0.hostname,
-              'target_alias':  item.item.1.alias,
-              'target_host':   item.item.1.hostname,
-              'status':        ('UP' if item.rc == 0 else 'DOWN'),
-              'detail':        (item.stdout_lines | select('match', '.*packet.*') | list | first
-                                | default(item.stdout_lines | last | default('ok')))
-                               if item.rc == 0
-                               else 'timeout or unreachable'
+              'target_alias': item.item.alias,
+              'target_host':  item.item.hostname,
+              'status':       ('UP' if item.rc == 0 else 'DOWN'),
+              'detail':       (item.stdout_lines | select('match', '.*packet.*') | list | first
+                               | default(item.stdout_lines | last | default('ok')))
+                              if item.rc == 0
+                              else 'timeout or unreachable'
             }]
           }}
       loop: "{{ ping_raw.results }}"
       loop_control:
-        label: "{{ item.item.0.alias }} → {{ item.item.1.alias }}"
-
+        label: "{{ item.item.alias }}"
+ 
     # ----------------------------------------------------------
-    # 2. TCP PORT CHECK – per source × (target × port) combination
+    # 2. TCP PORT CHECK – run from this host to each target:port
     # ----------------------------------------------------------
-    - name: "PORT | {{ item.0.alias }} → {{ item.1.0.alias }}:{{ item.1.1 }}"
+    - name: "PORT | {{ inventory_hostname }} → {{ item.0.alias }}:{{ item.1 }}"
       ansible.builtin.wait_for:
-        host: "{{ item.1.0.hostname }}"
-        port: "{{ item.1.1 }}"
+        host: "{{ item.0.hostname }}"
+        port: "{{ item.1 }}"
         timeout: "{{ port_check_timeout }}"
         state: started
       register: port_raw
-      loop: "{{ check_sources | product(check_targets | subelements('ports')) | list }}"
+      loop: "{{ check_targets | subelements('ports') }}"
       loop_control:
-        label: "{{ item.0.alias }} → {{ item.1.0.alias }}:{{ item.1.1 }}"
-      delegate_to: "{{ item.0.hostname }}"
+        label: "{{ item.0.alias }}:{{ item.1 }}"
       ignore_errors: true
-
+ 
     - name: Build port result facts
       ansible.builtin.set_fact:
         port_results: >-
           {{
             port_results | default([]) + [{
-              'source_alias':  item.item.0.alias,
-              'source_host':   item.item.0.hostname,
-              'target_alias':  item.item.1.0.alias,
-              'target_host':   item.item.1.0.hostname,
-              'port':          item.item.1.1,
-              'status':        ('OPEN'   if not item.failed else 'CLOSED'),
-              'detail':        ('' if not item.failed else (item.msg | default('connection refused / timeout') | trim))
+              'target_alias': item.item.0.alias,
+              'target_host':  item.item.0.hostname,
+              'port':         item.item.1,
+              'status':       ('OPEN' if not item.failed else 'CLOSED'),
+              'detail':       ('' if not item.failed else 'connection refused or timeout')
             }]
           }}
       loop: "{{ port_raw.results }}"
       loop_control:
-        label: "{{ item.item.0.alias }} → {{ item.item.1.0.alias }}:{{ item.item.1.1 }}"
-
+        label: "{{ item.item.0.alias }}:{{ item.item.1 }}"
+ 
     # ----------------------------------------------------------
     # 3. SUMMARY STATS
     # ----------------------------------------------------------
@@ -123,67 +97,18 @@
         stat_port_total:  "{{ port_results | length }}"
         stat_port_open:   "{{ port_results | selectattr('status', 'equalto', 'OPEN')   | list | length }}"
         stat_port_closed: "{{ port_results | selectattr('status', 'equalto', 'CLOSED') | list | length }}"
-
+ 
     # ----------------------------------------------------------
-    # 4. BUILD MATTERMOST MESSAGE
-    #    Grouped by source host for readability
-    # ----------------------------------------------------------
-    - name: Build Mattermost message body
-      ansible.builtin.set_fact:
-        mm_message: ""
-
-    - name: "Build Mattermost section for source: {{ src_item.alias }}"
-      vars:
-        src_ping: "{{ ping_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
-        src_port: "{{ port_results | selectattr('source_alias', 'equalto', src_item.alias) | list }}"
-        src_ping_up: "{{ src_ping | selectattr('status', 'equalto', 'UP') | list | length }}"
-        src_port_open: "{{ src_port | selectattr('status', 'equalto', 'OPEN') | list | length }}"
-      ansible.builtin.set_fact:
-        mm_message: >-
-          {{ mm_message }}
-
-          ---
-          #### :computer: Source: {{ src_item.alias }} (`{{ src_item.hostname }}`)
-
-          **Ping** ({{ src_ping_up }}/{{ src_ping | length }} UP)
-          | Target | Hostname | Status |
-          |--------|----------|--------|
-          {% for r in src_ping %}| {{ r.target_alias }} | {{ r.target_host }} | {{ ':white_check_mark: UP' if r.status == 'UP' else ':x: DOWN' }} |
-          {% endfor %}
-
-          **Ports** ({{ src_port_open }}/{{ src_port | length }} OPEN)
-          | Target | Hostname | Port | Status |
-          |--------|----------|------|--------|
-          {% for r in src_port %}| {{ r.target_alias }} | {{ r.target_host }} | {{ r.port }} | {{ ':white_check_mark: OPEN' if r.status == 'OPEN' else ':x: CLOSED' }} |
-          {% endfor %}
-      loop: "{{ check_sources }}"
-      loop_control:
-        loop_var: src_item
-        label: "{{ src_item.alias }}"
-
-    - name: Prepend Mattermost header
-      ansible.builtin.set_fact:
-        mm_message: |
-          ### :satellite: Connectivity Check Report
-          **Timestamp:** {{ report_ts }}
-          **Sources checked:** {{ check_sources | length }} &nbsp;|&nbsp; **Targets:** {{ check_targets | length }}
-          **Ping overall:** {{ stat_ping_up }}/{{ stat_ping_total }} UP &nbsp;|&nbsp; **Ports overall:** {{ stat_port_open }}/{{ stat_port_total }} OPEN
-          {{ mm_message }}
-
-
-    # ----------------------------------------------------------
-    # 11. CONSOLE SUMMARY
+    # 4. CONSOLE SUMMARY (on target host)
     # ----------------------------------------------------------
     - name: Print connectivity summary
       ansible.builtin.debug:
         msg:
           - "============================================"
           - " CONNECTIVITY CHECK SUMMARY"
+          - " Source : {{ inventory_hostname }}"
+          - " Time   : {{ report_ts }}"
           - "============================================"
-          - "Timestamp : {{ report_ts }}"
-          - "Sources   : {{ check_sources | map(attribute='alias') | join(', ') }}"
-          - "Targets   : {{ check_targets | map(attribute='alias') | join(', ') }}"
-          - "--------------------------------------------"
-          - "Ping  : {{ stat_ping_up }}/{{ stat_ping_total }} UP   ({{ stat_ping_down }} DOWN)"
+          - "Ping  : {{ stat_ping_up }}/{{ stat_ping_total }} UP  ({{ stat_ping_down }} DOWN)"
           - "Ports : {{ stat_port_open }}/{{ stat_port_total }} OPEN ({{ stat_port_closed }} CLOSED)"
-          - "--------------------------------------------"
+          - "============================================"
