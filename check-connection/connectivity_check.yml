@@ -75,3 +75,66 @@
           - "============================================"
           - "Ports : {{ stat_port_open }}/{{ stat_port_total }} OPEN ({{ stat_port_closed }} CLOSED)"
           - "============================================"
+
+# ==============================================================
+# PLAY 2 – Publish report from localhost
+# ==============================================================
+- name: "Play 2 | Publish report to Mattermost and Confluence"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+ 
+  vars_files:
+    - vars/targets.yml
+ 
+  vars:
+    _src:             "{{ hostvars[groups['check_source'][0]] }}"
+    report_ts:        "{{ _src.report_ts }}"
+    port_results:     "{{ _src.port_results }}"
+    source_host:      "{{ groups['check_source'][0] }}"
+    stat_port_total:  "{{ _src.stat_port_total }}"
+    stat_port_open:   "{{ _src.stat_port_open }}"
+    stat_port_closed: "{{ _src.stat_port_closed }}"
+ 
+  tasks:
+ 
+    # ----------------------------------------------------------
+    # 4. BUILD MATTERMOST MESSAGE
+    # ----------------------------------------------------------
+    - name: Build Mattermost port table rows
+      ansible.builtin.set_fact:
+        mm_port_rows: >-
+          {{
+            mm_port_rows | default('') +
+            '| ' + item.target_alias + ' | ' + item.target_host + ' | ' +
+            (item.port | string) + ' | ' +
+            (':white_check_mark: OPEN' if item.status == 'OPEN' else ':x: CLOSED') +
+            ' | ' + item.detail + ' |\n'
+          }}
+      loop: "{{ port_results }}"
+      loop_control:
+        label: "{{ item.target_alias }}:{{ item.port }}"
+ 
+    - name: Assemble Mattermost message
+      ansible.builtin.set_fact:
+        mm_message: |
+          ### :satellite: TCP Port Connectivity Check Report
+          **Timestamp:** {{ report_ts }}
+          **Source host:** `{{ source_host }}`
+          **Ports:** {{ stat_port_open }}/{{ stat_port_total }} OPEN &nbsp;|&nbsp; {{ stat_port_closed }} CLOSED
+ 
+          ---
+ 
+          #### :electric_plug: TCP Port Results ({{ stat_port_open }}/{{ stat_port_total }} OPEN)
+          | Target | Hostname | Port | Status | Detail |
+          |--------|----------|------|--------|--------|
+          {{ mm_port_rows | trim }}
+ 
+    - name: Send report to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_url }}"
+        api_key: "{{ mattermost_token }}"
+        channel_id: "{{ mattermost_channel }}"
+        text: "{{ mm_message }}"
+        username: "{{ mattermost_username }}"
+        icon_url: "{{ mattermost_icon_url }}"
