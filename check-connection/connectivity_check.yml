@@ -21,38 +21,6 @@
       ansible.builtin.set_fact:
         report_ts: "{{ ts_raw.stdout | trim }}"
  
-    # ----------------------------------------------------------
-    # 1. PING CHECK – run from this host to each target
-    # ----------------------------------------------------------
-    - name: "PING | {{ inventory_hostname }} → {{ item.alias }} ({{ item.hostname }})"
-      ansible.builtin.shell:
-        cmd: |
-          PING_BIN=$(command -v ping || echo /bin/ping)
-          $PING_BIN -c {{ ping_count }} -W {{ ping_timeout }} {{ item.hostname }} 2>/dev/null | tail -2
-        executable: /bin/bash
-      register: ping_raw
-      loop: "{{ check_targets }}"
-      loop_control:
-        label: "{{ item.alias }} ({{ item.hostname }})"
-      ignore_errors: true
-      changed_when: false
- 
-    - name: Build ping result facts
-      ansible.builtin.set_fact:
-        ping_results: >-
-          {{
-            ping_results | default([]) + [{
-              'target_alias': item.item.alias,
-              'target_host':  item.item.hostname,
-              'status':       ('UP' if item.rc == 0 else 'DOWN'),
-              'detail':       (item.stdout_lines | select('match', '.*packet.*') | list | first | default('ok'))
-                              if item.rc == 0
-                              else 'timeout or unreachable'
-            }]
-          }}
-      loop: "{{ ping_raw.results }}"
-      loop_control:
-        label: "{{ item.item.alias }}"
  
     # ----------------------------------------------------------
     # 2. TCP PORT CHECK – run from this host to each target:port
@@ -90,9 +58,6 @@
     # ----------------------------------------------------------
     - name: Compute summary statistics
       ansible.builtin.set_fact:
-        stat_ping_total:  "{{ ping_results | length }}"
-        stat_ping_up:     "{{ ping_results | selectattr('status', 'equalto', 'UP')     | list | length }}"
-        stat_ping_down:   "{{ ping_results | selectattr('status', 'equalto', 'DOWN')   | list | length }}"
         stat_port_total:  "{{ port_results | length }}"
         stat_port_open:   "{{ port_results | selectattr('status', 'equalto', 'OPEN')   | list | length }}"
         stat_port_closed: "{{ port_results | selectattr('status', 'equalto', 'CLOSED') | list | length }}"
@@ -108,6 +73,5 @@
           - " Source : {{ inventory_hostname }}"
           - " Time   : {{ report_ts }}"
           - "============================================"
-          - "Ping  : {{ stat_ping_up }}/{{ stat_ping_total }} UP  ({{ stat_ping_down }} DOWN)"
           - "Ports : {{ stat_port_open }}/{{ stat_port_total }} OPEN ({{ stat_port_closed }} CLOSED)"
           - "============================================"
